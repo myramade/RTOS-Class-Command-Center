@@ -1,0 +1,1788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RTOS Day 2 — Attack &amp; Harden Command Center</title>
+<style>
+  :root{
+    --navy:#0A2A55;
+    --navy2:#0E3B74;
+    --cyan:#0C7C93;
+    --cyan-bright:#12AEC9;
+    --ink:#14212E;
+    --muted:#5A6B7D;
+    --line:#D8E1EC;
+    --panel:#FFFFFF;
+    --panel2:#F1F5FA;
+    --soft:#F6F9FC;
+    --code-bg:#F4F7FB;
+    --green:#1F9D57;
+    --amber:#B7791F;
+    --red:#D64545;
+    --red-team:#C2410C;
+    --blue-team:#1D6FD6;
+    --chip:#1D4FB0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:#FFFFFF;
+    color:var(--ink);
+    font-family:Arial, "Helvetica Neue", Helvetica, "Segoe UI", sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  em{font-style:italic;color:var(--cyan);}
+  /* three-segment dash motif */
+  .dash{display:inline-flex;gap:5px;vertical-align:middle;margin-right:12px;}
+  .dash span{display:block;width:20px;height:5px;border-radius:2px;background:var(--cyan-bright);}
+  .dash span:nth-child(2){opacity:.65;width:13px;}
+  .dash span:nth-child(3){opacity:.35;width:8px;}
+
+  /* ---------- Facilitator top bar ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:#FFFFFF;
+    border-bottom:2px solid var(--line);
+    padding:10px 18px;
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    box-shadow:0 3px 12px rgba(20,40,70,.08);
+  }
+  .brand{display:flex;align-items:center;gap:2px;font-weight:800;letter-spacing:.5px;font-size:18px;color:var(--navy);}
+  .brand small{display:block;font-size:10px;font-weight:700;color:var(--cyan);letter-spacing:2px;margin-top:2px;}
+  .kicker{color:var(--cyan);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;}
+  .spacer{flex:1;}
+  .clock{
+    font-variant-numeric:tabular-nums;font-weight:800;font-size:22px;letter-spacing:1px;
+    background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 14px;color:var(--navy);
+  }
+  .clock.run{color:var(--green);border-color:var(--green);}
+  .btn{
+    cursor:pointer;border:1px solid var(--line);background:#FFFFFF;color:var(--ink);
+    padding:8px 14px;border-radius:9px;font-weight:700;font-size:13px;transition:.15s;user-select:none;
+  }
+  .btn:hover{background:var(--panel2);border-color:var(--cyan);}
+  .btn.cyan{background:var(--cyan-bright);color:#04263a;border-color:var(--cyan-bright);}
+  .btn.cyan:hover{filter:brightness(1.05);}
+  .btn.ghost{background:transparent;}
+  .btn.sm{padding:5px 10px;font-size:12px;}
+  .btn.on{background:var(--cyan-bright);color:#04263a;border-color:var(--cyan-bright);}
+
+  /* ---------- Layout ---------- */
+  .wrap{display:flex;min-height:calc(100vh - 62px);}
+  nav.rail{
+    width:230px;flex-shrink:0;background:var(--soft);border-right:1px solid var(--line);
+    padding:12px 10px;position:sticky;top:62px;height:calc(100vh - 62px);overflow:auto;
+  }
+  .rail h4{color:var(--muted);font-size:10px;letter-spacing:2px;margin:14px 8px 6px;text-transform:uppercase;}
+  .navitem{
+    display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border-radius:9px;cursor:pointer;margin-bottom:3px;
+    border:1px solid transparent;transition:.12s;
+  }
+  .navitem:hover{background:var(--panel2);}
+  .navitem.active{background:#E4F3F7;border-color:var(--cyan);}
+  .navitem .num{
+    flex-shrink:0;width:24px;height:24px;border-radius:6px;background:#FFFFFF;border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--cyan);
+  }
+  .navitem.active .num{background:var(--cyan-bright);color:#04263a;border-color:var(--cyan-bright);}
+  .navitem .t{font-size:12.5px;font-weight:700;line-height:1.25;color:var(--ink);}
+  .navitem .t small{display:block;color:var(--muted);font-weight:600;font-size:10.5px;margin-top:2px;}
+
+  main{flex:1;padding:26px 34px 90px;max-width:1100px;}
+  .modtag{color:var(--cyan);font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;}
+  h1.title{font-size:30px;margin:6px 0 4px;line-height:1.1;color:var(--navy);}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:18px;}
+  .band{
+    background:linear-gradient(90deg,#EAF2FB,#F6F9FC);border-left:4px solid var(--cyan-bright);
+    padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;color:var(--ink);font-size:14px;
+  }
+  .band b{color:var(--navy);}
+  .grid{display:grid;gap:14px;}
+  .card{
+    background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+    box-shadow:0 2px 8px rgba(20,40,70,.05);
+  }
+  .card h3{margin:0 0 8px;font-size:16px;color:var(--navy);}
+  .pill{display:inline-block;background:#E7EEFB;color:var(--chip);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;margin:0 6px 6px 0;}
+  .pill.src{background:#E4F5EA;color:#177a44;}
+  .pill.ring{background:#FBEADF;color:var(--red-team);}
+  .pill.wiz{background:#E6F0FD;color:var(--blue-team);}
+  code,pre{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;}
+  code{color:var(--navy);background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:.92em;}
+  pre{
+    background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;
+    font-size:13.5px;line-height:1.5;color:#1A2733;margin:10px 0;
+  }
+  pre code{background:none;padding:0;color:inherit;}
+  .cmt{color:#6B7D90;}
+  .kw{color:#0550AE;font-weight:600;}
+  .str{color:#0A7D2C;}
+  .vuln{background:#FBE0E0;border-bottom:2px solid var(--red);border-radius:3px;padding:0 2px;cursor:pointer;}
+  .vuln.found{background:#DDF3E5;border-bottom-color:var(--green);}
+
+  .taskbox{background:#EAF2FB;border:1px dashed var(--cyan);border-radius:12px;padding:14px 16px;margin:14px 0;}
+  .taskbox .lab{color:var(--cyan);font-weight:800;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+
+  .reveal{display:none;}
+  .reveal.show{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .answer{background:#E9F7EF;border:1px solid #9BD8B4;border-radius:12px;padding:14px 16px;margin-top:12px;}
+  .answer .lab{color:#177a44;font-weight:800;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+
+  /* option chips */
+  .opts{display:grid;gap:8px;margin:10px 0;}
+  .opt{
+    border:1px solid var(--line);background:var(--panel2);border-radius:10px;padding:10px 12px;cursor:pointer;font-size:14px;transition:.12s;color:var(--ink);
+  }
+  .opt:hover{border-color:var(--cyan);}
+  .opt.correct{border-color:var(--green);background:#E1F5E9;}
+  .opt.wrong{border-color:var(--red);background:#FBE3E3;}
+  .opt .why{display:none;font-size:12.5px;color:var(--muted);margin-top:6px;}
+  .opt.correct .why,.opt.wrong .why{display:block;}
+
+  /* order challenge */
+  .steps{display:grid;gap:8px;}
+  .step{
+    display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:grab;font-size:13.5px;color:var(--ink);
+  }
+  .step .h{width:22px;height:22px;border-radius:6px;background:#FFFFFF;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);}
+  .step.dragging{opacity:.4;}
+  .step.ok .h{background:var(--green);color:#fff;border-color:var(--green);}
+  .step.bad .h{background:var(--red);color:#fff;border-color:var(--red);}
+
+  /* MPU / data tables */
+  table.mpu{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;}
+  table.mpu th,table.mpu td{border:1px solid var(--line);padding:8px 10px;text-align:left;}
+  table.mpu th{background:var(--navy);color:#FFFFFF;font-size:11px;letter-spacing:1px;text-transform:uppercase;}
+  table.mpu td{color:var(--ink);}
+  .toggle{cursor:pointer;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid var(--line);user-select:none;}
+  .toggle.on{background:#E1F5E9;color:#177a44;border-color:var(--green);}
+  .toggle.off{background:#FBE3E3;color:var(--red);border-color:var(--red);}
+
+  /* leaderboard */
+  aside.board{
+    width:250px;flex-shrink:0;background:var(--soft);border-left:1px solid var(--line);
+    position:sticky;top:62px;height:calc(100vh - 62px);overflow:auto;padding:14px 12px;
+  }
+  .board h4{color:var(--cyan);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:2px 4px 10px;}
+  .team{background:#FFFFFF;border:1px solid var(--line);border-radius:11px;padding:9px 10px;margin-bottom:8px;box-shadow:0 1px 4px rgba(20,40,70,.05);}
+  .team .row1{display:flex;align-items:center;gap:8px;}
+  .team .nm{font-weight:800;font-size:13px;flex:1;color:var(--ink);}
+  .team .sc{font-variant-numeric:tabular-nums;font-weight:800;font-size:18px;color:var(--navy);}
+  .team .ctrl{display:flex;gap:5px;margin-top:7px;}
+  .team .ctrl .btn{flex:1;text-align:center;padding:4px 0;font-size:12px;}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .addteam{display:flex;gap:6px;margin:6px 4px 12px;}
+  .addteam input{flex:1;background:#FFFFFF;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 8px;font-size:12px;}
+
+  .rb{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;}
+  .rb .col{flex:1;min-width:230px;border-radius:12px;padding:12px 14px;border:1px solid var(--line);}
+  .rb .red{background:#FDECE4;border-color:var(--red-team);}
+  .rb .blue{background:#E9F2FD;border-color:var(--blue-team);}
+  .rb h4{margin:0 0 6px;font-size:13px;letter-spacing:1px;text-transform:uppercase;}
+  .rb .red h4{color:var(--red-team);}
+  .rb .blue h4{color:var(--blue-team);}
+  .rb ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.5;color:var(--ink);}
+
+  .facnote{background:#FFF7E1;border:1px solid var(--amber);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:13px;color:#6B5310;}
+  .facnote b{color:#8a6410;}
+  .timer-suggest{display:inline-flex;align-items:center;gap:6px;background:var(--soft);border:1px solid var(--line);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--muted);font-weight:700;}
+  .footctrl{display:flex;gap:10px;margin-top:26px;padding-top:18px;border-top:1px solid var(--line);}
+  ul.clean{padding-left:20px;line-height:1.6;font-size:14px;}
+  ul.clean li{margin-bottom:5px;}
+  .kbd{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px;font-family:monospace;color:var(--navy);font-weight:700;}
+  hr.soft{border:none;border-top:1px solid var(--line);margin:22px 0;}
+  .metrics{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 4px;}
+  .metric{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 14px;}
+  .metric .v{font-size:22px;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums;}
+  .metric .l{font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+  .flash{animation:flash .6s ease;}
+  @keyframes flash{0%{background:#E4F3F7;}100%{background:#FFFFFF;}}
+
+  /* bilingual instructions */
+  .bilang{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .bilang .lang{background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:0 2px 8px rgba(20,40,70,.05);}
+  .bilang .flag{font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .bilang ol{padding-left:20px;margin:0;line-height:1.65;font-size:14px;}
+  .bilang ol li{margin-bottom:9px;}
+  .bilang b{color:var(--navy);}
+  /* bilingual per-station brief */
+  .brief{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:16px 0;box-shadow:0 2px 8px rgba(20,40,70,.05);}
+  .brief-hd{background:var(--navy);color:#fff;font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;padding:9px 16px;}
+  .brief-grid{display:grid;grid-template-columns:1fr 1fr;}
+  .brief-col{padding:14px 16px;background:#fff;}
+  .brief-col.tr{background:var(--soft);border-left:1px solid var(--line);}
+  .brief-col .bl{font-size:11px;font-weight:800;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;}
+  .brief-col p{margin:0 0 8px;font-size:13.5px;line-height:1.55;color:var(--ink);}
+  .brief-col p:last-child{margin-bottom:0;}
+  .brief-col b{color:var(--navy);}
+  @media(max-width:820px){.brief-grid{grid-template-columns:1fr;}.brief-col.tr{border-left:none;border-top:1px solid var(--line);}}
+
+  /* code navigator */
+  .cn-wrap{display:grid;grid-template-columns:230px 1fr;gap:14px;margin:12px 0;}
+  .cn-tree{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px;font-size:13px;height:fit-content;}
+  .cn-tree .fh{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:10px 6px 4px;}
+  .cn-tree .fh:first-child{margin-top:2px;}
+  .cn-sym{display:flex;gap:7px;align-items:center;padding:6px 8px;border-radius:7px;cursor:pointer;color:var(--ink);border:1px solid transparent;}
+  .cn-sym:hover{background:#E4F3F7;}
+  .cn-sym.active{background:#E4F3F7;border-color:var(--cyan);font-weight:700;}
+  .cn-sym .fx{font-family:monospace;color:var(--cyan);font-size:12px;}
+  .cn-main{min-width:0;}
+  .cn-crumb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;margin-bottom:8px;color:var(--muted);}
+  .cn-crumb .c{cursor:pointer;color:var(--cyan);font-weight:700;}
+  .cn-crumb .c:hover{text-decoration:underline;}
+  .cn-filetitle{font-family:monospace;font-size:13px;color:var(--navy);font-weight:700;margin-bottom:6px;}
+  .cn-code{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:12px 6px;overflow:auto;}
+  .cn-line{font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px;line-height:1.55;white-space:pre;padding:1px 12px;border-left:3px solid transparent;}
+  .cn-line .ln{color:#9DB4D4;user-select:none;}
+  .cn-focus{background:#FFF7E1;border-left-color:var(--amber);}
+  .cn-lnk{color:var(--cyan);font-weight:700;cursor:pointer;border-bottom:1px dotted var(--cyan);}
+  .cn-lnk:hover{background:#E4F3F7;}
+  .cn-cmt{color:#6B7D90;}
+  .cn-note{margin-top:12px;background:#EAF2FB;border:1px solid var(--line);border-left:4px solid var(--cyan);border-radius:0 10px 10px 0;padding:12px 14px;font-size:13.5px;color:var(--ink);}
+  .cn-note b{color:var(--navy);}
+  .cn-tag{display:inline-block;background:var(--navy);color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:20px;margin-right:6px;}
+  @media(max-width:820px){.cn-wrap{grid-template-columns:1fr;}}
+
+  /* live debugger */
+  .cn-modes{display:flex;gap:8px;margin:14px 0 6px;}
+  .cn-mode{cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 16px;border-radius:9px;font-weight:700;font-size:13px;}
+  .cn-mode.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .dbg-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:10px 0;}
+  .dbg-scn{display:flex;gap:6px;flex-wrap:wrap;}
+  .dbg-tab{cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);padding:6px 12px;border-radius:8px;font-weight:700;font-size:12.5px;}
+  .dbg-tab.on{background:var(--cyan-bright);color:#04263a;border-color:var(--cyan-bright);}
+  .dbg-def{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--navy);}
+  .dbg-switch{cursor:pointer;user-select:none;min-width:52px;text-align:center;padding:5px 12px;border-radius:20px;font-weight:800;font-size:12px;border:1px solid var(--line);}
+  .dbg-switch.off{background:#FBE3E3;color:var(--red);border-color:var(--red);}
+  .dbg-switch.on{background:#E1F5E9;color:#177a44;border-color:var(--green);}
+  .dbg-grid{display:grid;grid-template-columns:1fr 270px;gap:12px;}
+  .dbg-h{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:0 0 6px;}
+  .dbg-codewrap,.dbg-side{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:12px;}
+  .dbg-code{font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px;line-height:1.6;}
+  .dbg-cl{white-space:pre;padding:1px 8px;border-left:3px solid transparent;border-radius:3px;color:#1A2733;}
+  .dbg-cl .cn-cmt{color:#6B7D90;}
+  .dbg-cur{background:#FFF3CE;border-left-color:var(--amber);font-weight:600;}
+  .dbg-cur::before{content:"▸ ";color:var(--amber);margin-left:-14px;}
+  .dbg-regs{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-family:monospace;font-size:13px;}
+  .dbg-regs .rk{color:var(--muted);font-weight:700;}
+  .dbg-regs .rv{color:var(--navy);text-align:right;}
+  .dbg-regs .rv.hb{color:var(--red);font-weight:800;background:#FBE3E3;border-radius:3px;}
+  .dbg-regs .rv.hg{color:#177a44;font-weight:800;background:#E1F5E9;border-radius:3px;}
+  .dbg-mem{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:12px;}
+  .dbg-cell{display:flex;justify-content:space-between;gap:12px;font-family:monospace;font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid var(--line);margin-bottom:6px;background:#fff;}
+  .dbg-cell .cl{color:var(--ink);}
+  .dbg-cell .cv{color:var(--navy);font-weight:700;}
+  .dbg-cell.written{background:#EAF7EF;border-color:#9BD8B4;}
+  .dbg-cell.intact{background:#EAF7EF;border-color:#9BD8B4;}
+  .dbg-cell.corrupt{background:#FBE3E3;border-color:var(--red);}
+  .dbg-cell.corrupt .cv{color:var(--red);}
+  .dbg-cell.shell{background:#FFF3CE;border-color:var(--amber);}
+  .dbg-mpurow{display:flex;justify-content:space-between;font-family:monospace;font-size:12.5px;padding:5px 8px;border-radius:6px;border:1px solid var(--line);margin-bottom:5px;background:#fff;}
+  .dbg-mpurow.hot{background:#FFF3CE;border-color:var(--amber);font-weight:700;}
+  .dbg-console{background:#0B1A2E;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:12px;}
+  .dbg-console .dbg-h{color:#7fa8c9;}
+  .dbg-log{font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:12.5px;line-height:1.6;max-height:180px;overflow:auto;}
+  .dbg-log .l{color:#c9d8e8;}
+  .dbg-log .l .step{color:#4d6a8f;}
+  .dbg-log .l.warn{color:#f2c037;}
+  .dbg-log .l.danger{color:#ff7b7b;font-weight:700;}
+  .dbg-log .l.good{color:#63e6a0;font-weight:700;}
+  .dbg-banner{margin-top:12px;border-radius:12px;padding:12px 16px;font-weight:800;font-size:15px;text-align:center;letter-spacing:.5px;}
+  .dbg-banner.bad{background:#FBE3E3;color:var(--red);border:1px solid var(--red);}
+  .dbg-banner.good{background:#E1F5E9;color:#177a44;border:1px solid var(--green);}
+  .dbg-ctrl{display:flex;gap:10px;align-items:center;margin-top:12px;}
+  .dbg-count{font-family:monospace;font-size:12px;color:var(--muted);margin-left:auto;}
+  @media(max-width:820px){.dbg-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dash"><span></span><span></span><span></span></span>
+  <div class="brand">RTOS DAY 2<small>ATTACK &amp; HARDEN — COMMAND CENTER</small></div>
+  <div class="spacer"></div>
+  <div class="timer-suggest" id="stationTimer">◷ <span id="stTime">45:00</span></div>
+  <button class="btn sm" id="startTimer">Start station</button>
+  <button class="btn sm ghost" id="resetTimer">Reset</button>
+  <div class="clock" id="dayClock">00:00:00</div>
+  <button class="btn sm cyan" id="dayToggle">▶ Day</button>
+  <button class="btn sm ghost" id="revealAll">Reveal keys</button>
+  <span style="width:1px;height:26px;background:var(--line)"></span>
+  <button class="btn sm ghost" id="saveSession" title="Download the session (teams, scores, station) as a file">⤓ Save</button>
+  <button class="btn sm ghost" id="loadSession" title="Restore a saved session file">⤒ Load</button>
+  <input type="file" id="loadFile" accept="application/json,.json" style="display:none">
+</header>
+
+<div class="wrap">
+  <!-- LEFT RAIL -->
+  <nav class="rail" id="rail"></nav>
+
+  <!-- MAIN -->
+  <main id="main"></main>
+
+  <!-- LEADERBOARD -->
+  <aside class="board">
+    <h4>◆ Peer-team score</h4>
+    <div class="addteam">
+      <input id="teamName" placeholder="Add team…" maxlength="16">
+      <button class="btn sm cyan" id="addTeam">+</button>
+    </div>
+    <div id="teams"></div>
+    <div style="margin:10px 4px;color:var(--muted);font-size:11px;line-height:1.5;">
+      Pairs work at their seats and call answers to the projected screen. Facilitator awards points on reveal.
+      Refresh clears the session.
+    </div>
+  </aside>
+</div>
+
+<script>
+/* =========================================================
+   STATE
+========================================================= */
+const state = {
+  station: 0,
+  teams: [
+    {id:1, name:"Team Actuator", score:0, color:"#F0653F"},
+    {id:2, name:"Team Nav",      score:0, color:"#3FA9F0"},
+    {id:3, name:"Team Watchdog", score:0, color:"#37D67A"},
+  ],
+  nextTeam: 4,
+};
+const palette = ["#F0653F","#3FA9F0","#37D67A","#F2C037","#B47CF0","#22C7E6","#F55B5B"];
+
+/* =========================================================
+   STATION CONTENT  (maps Modules 7–12 + WIZAPE + Ringzer0)
+========================================================= */
+const stations = [
+  /* ---------- INSTRUCTIONS (EN / TR) ---------- */
+  {
+    n:"i", nav:"Instructions", sub:"General instructions · Talimatlar", min:10,
+    render:()=>`
+      <div class="modtag">General Instructions · Genel Talimatlar</div>
+      <h1 class="title">How today works · Bugün nasıl işliyor</h1>
+      <div class="sub">RTOS Day 2 — Attack &amp; Harden. Read once, in English and Türkçe, before we start.</div>
+
+      <div class="bilang">
+        <div class="lang">
+          <div class="flag">◇ English</div>
+          <ol>
+            <li>Welcome to <b>Day 2 — Attack &amp; Harden the RTOS.</b> Today you take a safe real-time system and defend it against a live attacker.</li>
+            <li><b>One screen at the front.</b> Your facilitator drives it. You work in <b>peer pairs</b> at your seats. You do not need a laptop or internet — everything happens on the projected screen.</li>
+            <li><b>To answer, raise your hand.</b> The facilitator will call on a pair. Talk it through with your partner first.</li>
+            <li>Each correct answer earns your <b>team points</b> on the live leaderboard on the right. Aim for 75% to pass the hardening competency.</li>
+            <li>Some tasks are <b>Red Team</b> (attack) and some are <b>Blue Team</b> (defend). Your pair switches roles between stations.</li>
+            <li>Keep a <b>pen and the printed workbook</b> handy for sketches, math, and notes.</li>
+            <li><b>Every claim must be backed by math or a hardware fact</b> — no generic "it's secure." Ask questions at any time.</li>
+          </ol>
+        </div>
+        <div class="lang">
+          <div class="flag">◇ Türkçe</div>
+          <ol>
+            <li><b>2. Güne hoş geldiniz — RTOS'a Saldır ve Sağlamlaştır.</b> Bugün güvenli bir gerçek zamanlı sistemi alıp onu canlı bir saldırgana karşı savunacaksınız.</li>
+            <li><b>Önde tek bir ekran var.</b> Eğitmeniniz ekranı yönetir. Siz yerlerinizde <b>ikişerli eş gruplar</b> halinde çalışırsınız. Dizüstü bilgisayar veya internet gerekmez — her şey yansıtılan ekranda gerçekleşir.</li>
+            <li><b>Cevap vermek için elinizi kaldırın.</b> Eğitmen bir çifti söz için seçecektir. Önce eşinizle birlikte konuşup karar verin.</li>
+            <li>Her doğru cevap, sağdaki canlı puan tablosunda <b>takımınıza puan</b> kazandırır. Sağlamlaştırma yetkinliğini geçmek için hedef %75'tir.</li>
+            <li>Bazı görevler <b>Kırmızı Takım</b> (saldırı), bazıları <b>Mavi Takım</b> (savunma) içindir. Çiftiniz istasyonlar arasında rol değiştirir.</li>
+            <li>Eskizler, hesaplamalar ve notlar için bir <b>kalem ile basılı çalışma kitabını</b> yanınızda bulundurun.</li>
+            <li><b>Her iddia matematiksel veya donanımsal bir gerçeğe dayanmalıdır</b> — genel geçer "güvenlidir" ifadesi yeterli değildir. İstediğiniz zaman soru sorun.</li>
+          </ol>
+        </div>
+      </div>
+
+      ${navFoot()}
+    `
+  },
+
+  /* ---------- 0. OPENING ---------- */
+  {
+    n:"00", nav:"Opening", sub:"Baseline vote + threat mindset", min:15,
+    render:()=>`
+      <div class="modtag">Day 2 · Securing the RTOS</div>
+      <h1 class="title">From <em>safe</em> to <em>secure</em>: every interface is now an attack vector</h1>
+      <div class="sub">Day 1 proved the system is timing-safe. Day 2 assumes an adversary is on the bus. 6.5 hours, peer pairs, one projected screen.</div>
+
+      <div class="band">Yesterday you made the box <b>deterministic</b>. Today you keep it deterministic <b>while someone actively attacks it</b> — because a single buffer overflow can corrupt a TCB, break timing, and become a physical hazard at 120&nbsp;km/h or FL350.</div>
+
+      <div class="card">
+        <h3>◆ Baseline vote — hands up</h3>
+        <p style="font-size:14px;color:var(--muted)">Same bookend as Day 1, no props needed. <b>Raise your hand if you AGREE</b>; keep it down if you don't. No debate yet — we re-vote at wrap and see what moved.</p>
+        <ul class="clean">
+          <li><b>Statement 1:</b> "A certified-safe RTOS is automatically a secure RTOS."</li>
+          <li><b>Statement 2:</b> "If secure boot passes once at power-on, the firmware can be trusted for the whole flight."</li>
+          <li><b>Statement 3:</b> "Encrypting the link is enough — I don't need to authenticate it."</li>
+          <li><b>Statement 4:</b> "A JTAG port on a shipped avionics box is harmless if the software is signed."</li>
+        </ul>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>◆ Today's mission arc</h3>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+          ${["S1 · Threat-model the gateway (STRIDE)","S2 · Model the ThreadX kernel trust boundary","S3 · Break &amp; fix secure boot (TOCTOU + revocation)","S4 · Exploit the stack → corrupt a TCB","S5 · Lock it down with the MPU + SVC gate","S6 · Dump &amp; reverse firmware over JTAG","S7 · Keep timing under crypto jitter (WCET)","Capstone · One-page safety-security blueprint"].map(t=>`<div class="taskbox" style="margin:0"><span class="lab">${t.split(' · ')[0]}</span>${t.split(' · ')[1]}</div>`).join("")}
+        </div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><div class="v">7</div><div class="l">attack/harden stations</div></div>
+        <div class="metric"><div class="v">150</div><div class="l">certification points</div></div>
+        <div class="metric"><div class="v">113</div><div class="l">pass threshold (75%)</div></div>
+        <div class="metric"><div class="v">2</div><div class="l">engineers / peer pod</div></div>
+      </div>
+
+    `
+  },
+
+  /* ---------- 1. STRIDE ---------- */
+  {
+    n:"07", nav:"S1 · Threat Recon", sub:"STRIDE on the maintenance gateway", min:45,
+    render:()=>`
+      <div class="modtag">Module 7 · Threat Modeling</div>
+      <h1 class="title">Threat Recon: STRIDE the avionics maintenance gateway</h1>
+      <div class="sub">Projected system. Pods call out one threat per interface. Facilitator logs, then reveal the model.</div>
+      <div>
+        <span class="pill wiz">WIZAPE M15 · Threat Modeling</span>
+        <span class="pill ring">Ringzer0 · OT/IoT domain</span>
+        <span class="pill src">DO-326A / ED-202A</span>
+      </div>
+      ${brief(
+        "You're securing an avionics maintenance gateway (DAL C) that talks to a DAL A flight-control partition across five interfaces. Any weakness here becomes a safety failure.",
+        "In your pair, take the interface the facilitator assigns you. Name one STRIDE threat for it and the RTOS mechanism that blocks it. Raise your hand when ready.",
+        "DAL A uçuş kontrol bölümüyle beş arayüz üzerinden konuşan bir aviyonik bakım ağ geçidini (DAL C) güvenceye alıyorsunuz. Buradaki her zayıflık bir güvenlik (safety) arızasına dönüşür.",
+        "Çiftinizde, eğitmenin size verdiği arayüzü alın. Onun için bir STRIDE tehdidi ve bunu engelleyen RTOS mekanizmasını söyleyin. Hazır olduğunuzda elinizi kaldırın."
+      )}
+
+      <div class="card">
+        <h3>◆ The system on screen</h3>
+        <pre>  [ Ground laptop ]──USB/CAN──▶(MAINT GATEWAY)◀──ARINC 429──[ Flight Control DAL A ]
+                                     │  │  │
+                        Wi-Fi/BLE ───┘  │  └─── SPI flash (firmware + logs)
+                                        └─── TCP/IP stack (Amnesia:33 unpatched)  </pre>
+        <p style="font-size:13.5px;color:var(--muted)">The gateway is DAL C. It talks to a DAL A flight-control partition. That asymmetry is the whole game.</p>
+      </div>
+
+      <div class="taskbox">
+        <div class="lab">Peer task · 12 min</div>
+        Each pod owns <b>one interface</b> (USB/CAN, Wi-Fi/BLE, TCP/IP, SPI flash, ARINC 429). For your interface, name one <b>S·T·R·I·D·E</b> threat and the RTOS mechanism that blocks it. Buzz in when ready.
+      </div>
+
+      <div class="rb">
+        <div class="col red"><h4>◇ STRIDE = the six lenses</h4>
+          <ul><li><b>S</b>poofing identity</li><li><b>T</b>ampering with data</li><li><b>R</b>epudiation</li></ul></div>
+        <div class="col blue"><h4>◇ …continued</h4>
+          <ul><li><b>I</b>nformation disclosure</li><li><b>D</b>enial of service</li><li><b>E</b>levation of privilege</li></ul></div>
+      </div>
+
+      <button class="btn cyan revbtn" data-r="s1">Reveal model threats ▾</button>
+      <div class="reveal" id="rev-s1">
+        <div class="answer"><div class="lab">Model answer key</div>
+          <table class="mpu">
+            <tr><th>Interface</th><th>Lead STRIDE threat</th><th>RTOS / arch mitigation</th></tr>
+            <tr><td>Wi-Fi / BLE</td><td><b>E</b>levation — driver overflow → kernel exec</td><td>MPU-isolated non-privileged partition; no shared kernel heap</td></tr>
+            <tr><td>TCP/IP (Amnesia:33)</td><td><b>D</b>oS — malformed packet floods stack</td><td>Cyclic scheduler caps connectivity partition CPU budget (e.g. 10 ms)</td></tr>
+            <tr><td>USB / CAN</td><td><b>T</b>ampering — forged maintenance command frame</td><td>Message authentication + allowlist of CAN IDs, deny-by-default</td></tr>
+            <tr><td>SPI flash</td><td><b>T</b>ampering — physical flash swap of firmware</td><td>Signed image + hash verified from OTP (see Station 3)</td></tr>
+            <tr><td>ARINC 429 → DAL A</td><td><b>S</b>poofing — gateway impersonates a trusted source</td><td>One-way data diode + hardware time/space partition (FFI)</td></tr>
+          </table>
+          <p style="font-size:13px;margin:8px 0 0"><b style="color:var(--cyan)">The point:</b> the DAL C gateway must never be able to write DAL A memory or steal DAL A CPU time. Security failures here become <i>safety</i> failures. Award 5 pts / correct interface, +3 for naming the exact mitigation.</p>
+        </div>
+      </div>
+      ${navFoot()}
+    `
+  },
+
+  /* ---------- 1b. THREADX KERNEL THREAT MODEL ---------- */
+  {
+    n:"07B", nav:"S2 · Kernel Threat Model", sub:"ThreadX trust boundary", min:40,
+    render:()=>`
+      <div class="modtag">Module 7B · Kernel Threat Model</div>
+      <h1 class="title">Kernel Threat Model: where is the <em>one</em> line the attacker must cross?</h1>
+      <div class="sub">Grounded in Eclipse ThreadX on ARM Cortex-M. Pods build the authorization matrix, match threats to mitigations, then find the gap a legitimate syscall leaves open. (Same model applies to any Cortex-M RTOS — µC/OS-III, Zephyr, Keil RTX5.)</div>
+      <div>
+        <span class="pill src">Eclipse ThreadX · Cortex-M</span>
+        <span class="pill wiz">WIZAPE M5 Process · M7 Interrupts</span>
+        <span class="pill ring">ThreadX Modules · MPU</span>
+      </div>
+      ${brief(
+        "The attacker is an unprivileged ThreadX thread already running on the device. It can only cross into the kernel through one door: an SVC system call.",
+        "Working in pairs — (A) build the actor/asset authorization matrix on screen, (B) match each kernel threat to its mitigation, (C) name the attack that abuses a legitimate syscall and its ThreadX defense. Raise hands to answer.",
+        "Saldırgan, cihazda halihazırda çalışan ayrıcalıksız (unprivileged) bir ThreadX iş parçacığıdır (thread). Çekirdeğe yalnızca tek bir kapıdan geçebilir: bir SVC sistem çağrısı.",
+        "Çiftler halinde — (A) ekranda aktör/varlık yetkilendirme matrisini oluşturun, (B) her çekirdek tehdidini azaltma yöntemiyle eşleştirin, (C) meşru bir sistem çağrısını kötüye kullanan saldırıyı ve ThreadX savunmasını adlandırın. Cevap için elinizi kaldırın."
+      )}
+
+      <div class="band">The attacker is assumed to be an <b>unprivileged task</b> already running on the device. The trust boundary is crossed at <b>exactly one place</b>: when an unprivileged task issues an <span class="kbd">SVC</span> to call a kernel API. After the scheduler starts, no actor can touch an asset it isn't authorized to. Everything today defends that one crossing.</div>
+
+      <div class="card">
+        <h3>◆ The trust boundary on screen</h3>
+        <pre>  UNPRIVILEGED SIDE                    │  TRUST BOUNDARY  │        PRIVILEGED SIDE
+  ┌───────────────┐                    │                  │   ┌──────────────────┐
+  │ App task(s)   │──── SVC syscall ───┼──────▶ gate ─────┼──▶│ Kernel API + MPU  │
+  │ own stack R/W │  (the ONLY door)   │                  │   │ ISRs · peripherals│
+  └───────────────┘                    │                  │   └──────────────────┘</pre>
+      </div>
+
+      <div class="card">
+        <h3>◆ Challenge A — build the authorization matrix</h3>
+        <p style="font-size:13.5px;color:var(--muted)">Click each cell to cycle <b>R → W → X → –</b> until each actor has exactly the rights the Cortex-M / ThreadX model grants. Board goes green when it matches.</p>
+        <table class="mpu" id="authTable"></table>
+        <div id="authMsg" style="font-weight:700;margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <h3>◆ Challenge B — match threat → mitigation</h3>
+        <p style="font-size:13.5px;color:var(--muted)">Click a threat, then click its mitigation. Correct pairs lock green.</p>
+        <div id="tmMatch"></div>
+        <div id="tmMsg" style="font-weight:700;margin-top:8px"></div>
+      </div>
+
+      <div class="taskbox">
+        <div class="lab">Peer task C · the gap · 8 min</div>
+        The MPU stops <i>unauthorized</i> access. But what about an unprivileged thread that uses a <b>perfectly legitimate</b> syscall to reach a valid kernel object it was never meant to touch? Name the attack class and the ThreadX defense.
+      </div>
+
+      <button class="btn cyan revbtn" data-r="s1b">Reveal kernel threat key ▾</button>
+      <div class="reveal" id="rev-s1b">
+        <div class="answer"><div class="lab">Model answer key</div>
+          <b>Authorization matrix (per the Cortex-M / ThreadX model):</b> an <b>unprivileged thread</b> gets <b>R+X on application code</b> and <b>R+W on its own stack only</b> — nothing else. <b>Privileged threads / ISRs</b> reach kernel objects, MPU control registers, and peripherals. Peripherals (DMA/comms) touch their own special registers.
+          <hr class="soft">
+          <b>Threat → mitigation (the five the kernel owns + two it delegates):</b>
+          <ul class="clean" style="margin-top:6px">
+            <li><b>Access-privilege violation</b> → kernel programs the MPU at scheduler start <i>and on every context switch</i> to enforce the matrix.</li>
+            <li><b>Stack overflow</b> → an MPU region is sized/aligned to the thread stack, so writing past it <i>faults</i>; the app writer must keep adjacent memory unreachable by that thread.</li>
+            <li><b>Physical attack</b> → out of MPU scope; app writer adds physical protections / restricted deployment.</li>
+            <li><b>Source-code modification</b> → do not modify the certified RTOS kernel source.</li>
+            <li><b>Binary modification</b> → hardware root of trust + secure boot + signature verification (that's Station 3).</li>
+          </ul>
+          <b>The gap (Challenge C):</b> <b>Kernel Object Masquerading (KOM)</b> — an unprivileged thread calls a legitimate syscall but passes a forged or adjacent control-block pointer to act on an object it doesn't own (demonstrated against ThreadX at USENIX Security '25). <b>Defense:</b> ThreadX stamps every control block with a type ID (e.g. <code>tx_semaphore_id == TX_SEMAPHORE_ID</code>) and every API validates it, rejecting mismatches with <code>TX_SEMAPHORE_ERROR</code>; harden further with a kernel-maintained object registry that validates the pointer <i>and</i> type before use, plus MPU isolation so a thread can't fabricate a control block in kernel-owned memory.
+          <p style="font-size:13px;margin:8px 0 0"><b style="color:var(--cyan)">Scoring:</b> matrix 8, threat matches 7 (1 each), masquerading + object-ID defense 10 = 25 pts.</p>
+        </div>
+      </div>
+      ${navFoot()}
+    `,
+    mount:mountKernelTM
+  },
+
+  /* ---------- CODE LAB — NAVIGABLE RTOS KERNEL ---------- */
+  {
+    n:"‹/›", nav:"Code Lab · Navigate the kernel", sub:"ThreadX-style Cortex-M source", min:35,
+    render:()=>`
+      <div class="modtag">Code Lab · Navigate the RTOS</div>
+      <h1 class="title">Navigate a basic ARM RTOS kernel, top to bottom</h1>
+      <div class="sub">A minimal, readable ThreadX-style kernel for Cortex-M. Click any <span style="color:var(--cyan);font-weight:700;border-bottom:1px dotted var(--cyan)">cyan call</span> to drill into its definition. Trace the path from <code>app.c</code> down to the MPU. Yellow lines are where security lives.</div>
+      <div>
+        <span class="pill src">Eclipse ThreadX · Cortex-M (illustrative)</span>
+        <span class="pill wiz">WIZAPE M2–M9 Kernel internals</span>
+        <span class="pill ring">Ringzer0 · read the source</span>
+      </div>
+      ${brief(
+        "This is a stripped-down real-time kernel in the ThreadX idiom. Follow one call chain all the way down: create a thread, schedule it, switch to it (PendSV), and watch the MPU get reprogrammed for it.",
+        "In pairs, drill down through the calls and answer on the worksheet: (1) where is the trust boundary crossed? (2) which line reprograms the MPU? (3) which TCB field, if corrupted, hijacks the thread? (4) which check blocks object masquerading?",
+        "Bu, ThreadX tarzında sadeleştirilmiş bir gerçek zamanlı çekirdektir. Tek bir çağrı zincirini en alta kadar izleyin: bir iş parçacığı oluşturun, zamanlayın, ona geçin (PendSV) ve MPU'nun onun için yeniden programlandığını görün.",
+        "Çiftler halinde, çağrılarda aşağı inin ve çalışma kağıdında yanıtlayın: (1) güven sınırı nerede geçilir? (2) hangi satır MPU'yu yeniden programlar? (3) bozulursa iş parçacığını ele geçiren TCB alanı hangisidir? (4) nesne taklidini hangi kontrol engeller?"
+      )}
+
+      <div class="cn-modes">
+        <button class="cn-mode on" id="modeNav" onclick="cnMode('nav')">Navigate source</button>
+        <button class="cn-mode" id="modeDbg" onclick="cnMode('dbg')">Live debugger ▚</button>
+      </div>
+
+      <div id="cnNavigate">
+      <div class="cn-wrap">
+        <div class="cn-tree" id="cnTree"></div>
+        <div class="cn-main">
+          <div class="cn-crumb" id="cnCrumb"></div>
+          <div class="cn-filetitle" id="cnTitle"></div>
+          <div class="cn-code" id="cnCode"></div>
+          <div class="cn-note" id="cnNote"></div>
+        </div>
+      </div>
+      </div>
+
+      <div id="cnDebug" style="display:none">
+        <div class="dbg-bar">
+          <div class="dbg-scn">
+            <button class="dbg-tab on" data-scn="A" onclick="dbgSetScn('A')">① Stack-pointer hijack</button>
+            <button class="dbg-tab" data-scn="B" onclick="dbgSetScn('B')">② MPU execute-never</button>
+          </div>
+          <div class="dbg-def"><span id="dbgDefLabel">Bounds check</span>
+            <span class="dbg-switch off" id="dbgSwitch" onclick="dbgToggleDef()">OFF</span></div>
+        </div>
+        <div class="dbg-grid">
+          <div class="dbg-codewrap"><div class="dbg-h">Source · <span id="dbgFile" style="font-family:monospace;color:var(--navy)"></span></div><div class="dbg-code" id="dbgCode"></div></div>
+          <div class="dbg-side">
+            <div class="dbg-h">CPU registers</div><div class="dbg-regs" id="dbgRegs"></div>
+            <div class="dbg-h" id="dbgMpuH" style="display:none;margin-top:12px">MPU regions</div><div id="dbgMpu"></div>
+          </div>
+        </div>
+        <div class="dbg-mem"><div class="dbg-h">Memory</div><div id="dbgCells"></div></div>
+        <div class="dbg-banner" id="dbgBanner" style="display:none"></div>
+        <div class="dbg-console"><div class="dbg-h">Fault console</div><div class="dbg-log" id="dbgLog"></div></div>
+        <div class="dbg-ctrl">
+          <button class="btn cyan" id="dbgStepBtn" onclick="dbgStep()">Step ▸</button>
+          <button class="btn" id="dbgRunBtn" onclick="dbgRun()">Run ▶</button>
+          <button class="btn ghost" onclick="dbgReset()">Reset ↺</button>
+          <span class="dbg-count" id="dbgCount"></span>
+        </div>
+      </div>
+
+      ${navFoot()}
+    `,
+    mount:mountCodeNav
+  },
+
+  /* ---------- 2. SECURE BOOT / TOCTOU ---------- */
+  {
+    n:"08", nav:"S3 · Break the Boot", sub:"TOCTOU + key revocation", min:55,
+    render:()=>`
+      <div class="modtag">Module 8 · Chain of Trust</div>
+      <h1 class="title">Break the Boot: order the chain, then find the flash-swap</h1>
+      <div class="sub">Drag the boot steps into order on screen. Then pods hunt the TOCTOU flaw and design the revocation bitmask.</div>
+      <div>
+        <span class="pill wiz">WIZAPE M22 Secure Boot · M23 Key Mgmt</span>
+        <span class="pill ring">Ringzer0 · firmware trust</span>
+        <span class="pill src">Anti-rollback / OTP fuses</span>
+      </div>
+      ${brief(
+        "The gateway uses an asymmetric secure-boot chain. The Boot ROM verifies a public key held in external SPI flash, then jumps. You must order the chain and find the physical attack it allows.",
+        "In pairs — (A) vote on the correct order of the boot steps, (B) pick where the TOCTOU window opens, (C) design the 4-slot OTP revocation bitmask. Raise hands to defend your order.",
+        "Ağ geçidi asimetrik bir güvenli önyükleme zinciri kullanır. Boot ROM, harici SPI flash'ta tutulan bir açık anahtarı doğrular ve sonra atlar. Zinciri sıraya koymalı ve izin verdiği fiziksel saldırıyı bulmalısınız.",
+        "Çiftler halinde — (A) önyükleme adımlarının doğru sırası için oy verin, (B) TOCTOU penceresinin nerede açıldığını seçin, (C) 4 yuvalı OTP iptal bit maskesini tasarlayın. Sıralamanızı savunmak için elinizi kaldırın."
+      )}
+
+      <div class="card">
+        <h3>◆ Challenge A — order the verified boot sequence</h3>
+        <p style="font-size:13.5px;color:var(--muted)">Drag into the correct chronological order. Then press check. (Pods vote first, facilitator drags.)</p>
+        <div class="steps" id="bootSteps"></div>
+        <div style="margin-top:10px"><button class="btn cyan" id="checkBoot">Check order</button> <span id="bootMsg" style="margin-left:10px;font-weight:700"></span></div>
+      </div>
+
+      <div class="taskbox">
+        <div class="lab">Peer task B · spot the TOCTOU · 10 min</div>
+        The Boot ROM verifies the public key <b>directly on external SPI flash</b>, then jumps. Where is the Time-of-Check-to-Time-of-Use window, and what hardware move closes it?
+      </div>
+      <div class="opts" id="toctouOpts"></div>
+
+      <button class="btn cyan revbtn" data-r="s2">Reveal boot + revocation key ▾</button>
+      <div class="reveal" id="rev-s2">
+        <div class="answer"><div class="lab">Model answer key</div>
+          <b>TOCTOU flash-swap:</b> if the ROM hashes the key/image <i>on the external bus</i>, an FPGA emulator can feed the valid signed bytes during the hash, then swap the bus lines to serve malicious code at the moment control transfers. <b>Fix:</b> copy key + image into internal secure RAM <i>first</i>, verify there, execute from there — check and use hit the same trusted memory.
+          <hr class="soft">
+          <b>Revocation bitmask (4 OTP slots):</b> reserve a 4-bit OTP register, <code>0b1111</code> = all valid. Compromise slot 1 → burn the fuse → <code>0b1101</code> (irreversible). Boot ROM reads which slot signed the manifest and rejects if <code>(OTP_REVOKE_REG &amp; (1&lt;&lt;slot)) == 0</code>.
+          <br><br><b>Anti-rollback:</b> each image carries a monotonic version counter; boot rejects any image whose counter is below the hardware monotonic reference — blocks re-flashing an older, validly-signed but vulnerable image into the inactive partition.
+          <p style="font-size:13px;margin:8px 0 0"><b style="color:var(--cyan)">Scoring:</b> boot order 10, TOCTOU 8, revocation math 12 = 30 pts.</p>
+        </div>
+      </div>
+      ${navFoot()}
+    `,
+    mount:mountBoot
+  },
+
+  /* ---------- 3. STACK EXPLOIT ---------- */
+  {
+    n:"11", nav:"S4 · Exploit the Stack", sub:"Parser overflow → TCB corruption", min:55,
+    render:()=>`
+      <div class="modtag">Module 11 · Vulnerable Parser Forensics</div>
+      <h1 class="title">Exploit the Stack: from a network buffer to a corrupted task</h1>
+      <div class="sub">Projected C. Pods click the vulnerable line, then trace the corruption chain and prescribe the fix.</div>
+      <div>
+        <span class="pill ring">Ringzer0 · Ex#5 Stack/Heap exploit</span>
+        <span class="pill wiz">WIZAPE M6 Memory · M17 Secure Coding</span>
+        <span class="pill src">ISO 26262 FFI</span>
+      </div>
+      ${brief(
+        "A network telemetry parser copies an attacker-controlled frame into a fixed 256-byte buffer sitting right next to a Task Control Block. One bad memcpy becomes a corrupted task.",
+        "Red team — find the vulnerable line on screen, then trace the overflow to a physical hazard. Blue team — write the one-line fix and name the hardware that contains it. Raise hands to present.",
+        "Bir ağ telemetri ayrıştırıcısı, saldırgan kontrolündeki bir çerçeveyi, bir Görev Kontrol Bloğu'nun (TCB) hemen yanında duran sabit 256 baytlık bir arabelleğe kopyalar. Kötü bir memcpy, bozulmuş bir göreve dönüşür.",
+        "Kırmızı takım — ekrandaki savunmasız satırı bulun, ardından taşmayı fiziksel bir tehlikeye kadar izleyin. Mavi takım — tek satırlık düzeltmeyi yazın ve bunu sınırlayan donanımı adlandırın. Sunmak için elinizi kaldırın."
+      )}
+
+      <div class="card">
+        <h3>◆ The vulnerable telemetry parser (click the bug)</h3>
+        <pre id="parserCode"></pre>
+        <div id="parserMsg" style="font-weight:700;font-size:13px;min-height:18px"></div>
+      </div>
+
+      <div class="rb">
+        <div class="col red"><h4>◇ Red team · 8 min</h4>
+          <ul><li>What exactly overflows, and by how many bytes for a 300-byte frame?</li><li>Which RTOS structure sits next in memory and gets corrupted?</li><li>What's the physical consequence?</li></ul></div>
+        <div class="col blue"><h4>◇ Blue team · 8 min</h4>
+          <ul><li>Rewrite the copy safely (one line).</li><li>Which hardware feature (Station 5) contains the blast radius even if the bug ships?</li><li>Why is ASLR the <i>wrong</i> answer here?</li></ul></div>
+      </div>
+
+      <button class="btn cyan revbtn" data-r="s3">Reveal exploit + fix ▾</button>
+      <div class="reveal" id="rev-s3">
+        <div class="answer"><div class="lab">Model answer key</div>
+          <b>Bug:</b> <code>memcpy(rx_buf, frame, len)</code> copies attacker-controlled <code>len</code> into a fixed 256-byte <code>rx_buf</code>. A 300-byte frame overflows by <b>44 bytes</b>, past the buffer into the adjacent <b>Task Control Block</b> — corrupting the saved stack pointer / priority field.
+          <br><br><b>Chain:</b> overflow → TCB.pxTopOfStack overwritten → on next context switch the scheduler restores a bogus SP → PC lands on attacker data → arbitrary execution <i>inside</i> a real-time task → missed actuation deadline → physical hazard.
+          <br><br><b>Fix (Blue):</b> <code>if (len &gt; sizeof(rx_buf)) reject(); memcpy(rx_buf, frame, len);</code> — bounds-check against the destination, not the source.
+          <br><br><b>Containment:</b> MPU region makes the parser task's stack <b>non-executable</b> and write-protects the neighboring TCB → fault instead of exec (Station 5). <b>ASLR is wrong</b> for hard real-time: randomized layout destroys deterministic WCET and blows the certification timing budget.
+          <p style="font-size:13px;margin:8px 0 0"><b style="color:var(--cyan)">Scoring:</b> find line 4, +5 chain, +5 fix, +5 ASLR trap = 20 pts.</p>
+        </div>
+      </div>
+      ${navFoot()}
+    `,
+    mount:mountParser
+  },
+
+  /* ---------- 4. MPU ---------- */
+  {
+    n:"09", nav:"S5 · Lock the MPU", sub:"Regions + privileged SVC gate", min:50,
+    render:()=>`
+      <div class="modtag">Module 9 · Memory Protection Unit</div>
+      <h1 class="title">Lock the MPU: isolate the tasks, gate the syscall</h1>
+      <div class="sub">Toggle each region's attributes on screen until the config is airtight. The board turns green when the isolation holds.</div>
+      <div>
+        <span class="pill wiz">WIZAPE M4 Architecture · M6 Memory</span>
+        <span class="pill ring">Ringzer0 · Memory Protection</span>
+        <span class="pill src">ARM Cortex-M · SVC</span>
+      </div>
+      ${brief(
+        "You must configure the Cortex-M MPU so the DAL A flight-control task is isolated, the untrusted parser cannot execute its own stack, and peripherals are privileged-only.",
+        "In pairs — toggle the MPU region attributes on screen until the board turns green, then design the SVC gate that lets the parser log to flash without gaining privilege. Raise hands to explain your gate.",
+        "Cortex-M MPU'yu; DAL A uçuş kontrol görevi yalıtılacak, güvenilmeyen ayrıştırıcı kendi yığınını çalıştıramayacak ve çevre birimleri yalnızca ayrıcalıklı olacak şekilde yapılandırmalısınız.",
+        "Çiftler halinde — pano yeşile dönene kadar ekrandaki MPU bölge özniteliklerini değiştirin, ardından ayrıştırıcının ayrıcalık kazanmadan flash'a günlük yazmasını sağlayan SVC kapısını tasarlayın. Kapınızı açıklamak için elinizi kaldırın."
+      )}
+
+      <div class="card">
+        <h3>◆ MPU region table — click attributes to fix the config</h3>
+        <p style="font-size:13.5px;color:var(--muted)">Goal: DAL A flight control isolated; the parser (untrusted) cannot execute its own stack or touch DAL A; peripherals are privileged-only.</p>
+        <table class="mpu" id="mpuTable"></table>
+        <div id="mpuMsg" style="font-weight:700;margin-top:8px"></div>
+      </div>
+
+      <div class="taskbox">
+        <div class="lab">Peer task · design the SVC gate · 8 min</div>
+        The parser task must occasionally write a log to SPI flash — a privileged peripheral. It <b>cannot</b> be given direct access. Sketch how it reaches the flash without gaining privilege.
+      </div>
+
+      <button class="btn cyan revbtn" data-r="s4">Reveal MPU + SVC key ▾</button>
+      <div class="reveal" id="rev-s4">
+        <div class="answer"><div class="lab">Model answer key</div>
+          <b>Correct config:</b> DAL A = privileged RW, <i>execute-never</i> for anyone else; Parser stack = non-privileged RW, <b>XN (execute-never)</b>; Peripherals = privileged-only; Kernel = privileged RW/RO. Background region disabled so anything unmapped faults.
+          <br><br><b>SVC gate:</b> the parser issues <code>SVC #n</code> → CPU traps to the privileged handler → handler <i>validates the request</i> (length, target, caller ID) → performs the flash write on the task's behalf → returns. The task never holds the peripheral privilege; the gate is the only door, and it checks every caller. This is the software analogue of Day 1's Gatekeeper task.
+          <p style="font-size:13px;margin:8px 0 0"><b style="color:var(--cyan)">Scoring:</b> airtight board 10, valid SVC gate w/ validation step 15 = 25 pts.</p>
+        </div>
+      </div>
+      ${navFoot()}
+    `,
+    mount:mountMPU
+  },
+
+  /* ---------- 5. JTAG DUMP / REVERSE ---------- */
+  {
+    n:"16", nav:"S6 · Dump &amp; Reverse", sub:"JTAG firmware extraction", min:45,
+    render:()=>`
+      <div class="modtag">Module · Firmware Extraction &amp; RE</div>
+      <h1 class="title">Dump &amp; Reverse: pull the firmware over JTAG, then close the port</h1>
+      <div class="sub">Red team plans the attack chain on screen; Blue team names the fuse/config that kills it. Buzz to lock answers.</div>
+      <div>
+        <span class="pill ring">Ringzer0 · Ex#7 JTAG dump · Ex#8 RE</span>
+        <span class="pill wiz">WIZAPE M16 Testing · M4 Architecture</span>
+        <span class="pill src">LPC55S69 · J-Link · GDB</span>
+      </div>
+      ${brief(
+        "A shipped avionics box still has a live JTAG header. An attacker with physical access wants your firmware and signing keys.",
+        "Red team — order the JTAG attack chain on screen. Blue team — name one hardware or config countermeasure for each attacker step. Deepest defense wins. Raise hands to claim a step.",
+        "Sevk edilen bir aviyonik kutuda hâlâ etkin bir JTAG başlığı var. Fiziksel erişimi olan bir saldırgan, aygıt yazılımınızı ve imzalama anahtarlarınızı istiyor.",
+        "Kırmızı takım — ekranda JTAG saldırı zincirini sıralayın. Mavi takım — her saldırgan adımı için bir donanım veya yapılandırma karşı önlemi söyleyin. En derin savunma kazanır. Bir adımı almak için elinizi kaldırın."
+      )}
+
+      <div class="card">
+        <h3>◆ Attack chain — put the steps in order</h3>
+        <div class="steps" id="jtagSteps"></div>
+        <div style="margin-top:10px"><button class="btn cyan" id="checkJtag">Check chain</button> <span id="jtagMsg" style="margin-left:10px;font-weight:700"></span></div>
+      </div>
+
+      <div class="taskbox">
+        <div class="lab">Blue team · 10 min · one countermeasure per attacker step</div>
+        For each step the Red team just ordered, name the hardware or config control that prevents it. Deepest defense wins the points.
+      </div>
+
+      <button class="btn cyan revbtn" data-r="s5">Reveal dump chain + defenses ▾</button>
+      <div class="reveal" id="rev-s5">
+        <div class="answer"><div class="lab">Model answer key</div>
+          <table class="mpu">
+            <tr><th>Attacker step (Red)</th><th>Countermeasure (Blue)</th></tr>
+            <tr><td>Connect J-Link to the Cortex debug header</td><td>Blow the <b>debug-disable OTP fuse</b> / DBGEN in production; depopulate the header</td></tr>
+            <tr><td>Halt core with GDB, read memory</td><td>Enable <b>secure debug authentication</b> (challenge-response, DP lock)</td></tr>
+            <tr><td>Dump internal flash to a .bin</td><td><b>Read-out protection</b> (RDP L2) + flash encryption at rest</td></tr>
+            <tr><td>Decompile / static + dynamic RE</td><td>Strip symbols; secrets in <b>OTP/HSM</b>, never in the image (ties to Day-1 crypto: no hardcoded keys)</td></tr>
+            <tr><td>Extract signing/root keys from the dump</td><td>Keys live in <b>OTP fuses / secure element</b>, unreadable over the bus</td></tr>
+          </table>
+          <p style="font-size:13px;margin:8px 0 0"><b style="color:var(--cyan)">Callback:</b> this is why Station 1's "just encrypt it" got buzzed — if a hardcoded key ships in flash, JTAG dump hands the attacker the whole crypto scheme. <b>Scoring:</b> chain order 5, one valid defense per step 10 = 15 pts.</p>
+        </div>
+      </div>
+      ${navFoot()}
+    `,
+    mount:mountJtag
+  },
+
+  /* ---------- 6. WCET JITTER ---------- */
+  {
+    n:"10", nav:"S7 · Time the Crypto", sub:"WCET under crypto jitter", min:45,
+    render:()=>`
+      <div class="modtag">Module 10 · WCET &amp; Timing Jitter</div>
+      <h1 class="title">Time the Crypto: does the schedule still hold when you add signing?</h1>
+      <div class="sub">Security added a crypto task. Pods recompute utilization and prove the deadline holds — or doesn't. Step-reveal the math.</div>
+      <div>
+        <span class="pill wiz">WIZAPE M9 Scheduling · M13 Crypto</span>
+        <span class="pill src">Rate-Monotonic · schedulability</span>
+      </div>
+      ${brief(
+        "Security added a message-signing task to a rate-monotonic schedule. Its worst-case time swells with hardware jitter. You must prove whether the actuation task still meets its 4 ms deadline.",
+        "In pairs — (1) compute total CPU utilization at worst case, (2) compare to the RMS bound, (3) decide if the schedule holds and why crypto must be rate-limited. Raise hands with your numbers.",
+        "Güvenlik, oran-monotonik (RMS) bir zamanlamaya bir mesaj imzalama görevi ekledi. En kötü durum süresi donanım seğirmesiyle (jitter) şişer. Harekete geçirme görevinin hâlâ 4 ms son teslim süresini karşılayıp karşılamadığını kanıtlamalısınız.",
+        "Çiftler halinde — (1) en kötü durumda toplam CPU kullanımını hesaplayın, (2) RMS sınırıyla karşılaştırın, (3) zamanlamanın geçerli olup olmadığına ve kriptonun neden hız sınırlaması gerektiğine karar verin. Sayılarınızla elinizi kaldırın."
+      )}
+
+      <div class="card">
+        <h3>◆ The hardened task set (RMS, single core)</h3>
+        <table class="mpu">
+          <tr><th>Task</th><th>Role</th><th>Period T</th><th>WCET C</th></tr>
+          <tr><td>H</td><td>Actuation (DAL A)</td><td>4 ms</td><td>1.5 ms</td></tr>
+          <tr><td>M</td><td>Navigation</td><td>8 ms</td><td>2.0 ms</td></tr>
+          <tr><td><b>C</b></td><td><b>NEW: message signing (crypto)</b></td><td>16 ms</td><td>3.0 ms + jitter</td></tr>
+        </table>
+        <p style="font-size:13.5px;color:var(--muted)">The crypto task's WCET jumps when the hardware accelerator is contended, adding up to <b>2.0 ms jitter</b>. Question: does Task H still meet its 4 ms deadline?</p>
+      </div>
+
+      <div class="taskbox">
+        <div class="lab">Peer task · 12 min</div>
+        (1) Compute total CPU utilization with C at its worst case (5.0 ms). (2) Compare to the RMS bound for 3 tasks. (3) State whether H is safe and why the crypto task must be <b>rate-limited or offloaded</b>.
+      </div>
+
+      <button class="btn cyan revbtn" data-r="s6a">Reveal step 1 — utilization ▾</button>
+      <div class="reveal" id="rev-s6a"><div class="answer"><div class="lab">Step 1</div>
+        U = 1.5/4 + 2.0/8 + 5.0/16 = 0.375 + 0.250 + 0.3125 = <b>0.9375 (93.75%)</b>.
+      </div></div>
+
+      <button class="btn cyan revbtn" data-r="s6b" style="margin-top:10px">Reveal step 2 — RMS bound ▾</button>
+      <div class="reveal" id="rev-s6b"><div class="answer"><div class="lab">Step 2</div>
+        Liu &amp; Layland bound for n=3: U ≤ 3(2^(1/3) − 1) = <b>0.780 (77.9%)</b>. Our 93.75% <b>exceeds</b> the sufficient bound — the utilization test <i>fails</i>.
+      </div></div>
+
+      <button class="btn cyan revbtn" data-r="s6c" style="margin-top:10px">Reveal step 3 — verdict + fix ▾</button>
+      <div class="reveal" id="rev-s6c"><div class="answer"><div class="lab">Step 3 · verdict</div>
+        Failing the LL bound isn't proof of miss (it's sufficient, not necessary) — so run <b>exact Response-Time Analysis</b> on H. With jitter, C's worst case can preempt lower-priority work and push M's response out; H (highest priority) still meets 4 ms, but <b>M</b> is at risk. <b>Fix:</b> rate-limit signing, give crypto its own <b>time-partition budget</b>, or offload to the accelerator with a bounded, measured WCET. Security must never buy itself unbounded jitter.
+        <p style="font-size:13px;margin:8px 0 0"><b style="color:var(--cyan)">Scoring:</b> U correct 5, bound 3, RTA reasoning + fix 7 = 15 pts.</p>
+      </div></div>
+      ${navFoot()}
+    `
+  },
+
+  /* ---------- 7. CAPSTONE ---------- */
+  {
+    n:"12", nav:"Capstone", sub:"One-page blueprint + final vote", min:50,
+    render:()=>`
+      <div class="modtag">Module 12 · Capstone</div>
+      <h1 class="title">Secure the RTOS: one-page integrated safety-security blueprint</h1>
+      <div class="sub">Each pod assembles the whole day into a single defended architecture and defends it to the room. Red team gets one attack; Blue must show the layer that stops it.</div>
+      <div>
+        <span class="pill src">DO-326A + DO-178C</span>
+        <span class="pill wiz">WIZAPE M24 Industry</span>
+        <span class="pill ring">Ringzer0 · Source audit</span>
+      </div>
+      ${brief(
+        "Each pair assembles the whole day into one defended architecture — six layers, each retiring a threat you attacked today — and defends it to the room.",
+        "In pairs — build the one-page blueprint covering all six layers. Then Red team launches one attack from today; Blue team names the exact layer that stops it, with the math or hardware behind it. Raise hands to present.",
+        "Her çift, tüm günü tek bir savunulmuş mimariye dönüştürür — bugün saldırdığınız bir tehdidi ortadan kaldıran altı katman — ve bunu tüm gruba savunur.",
+        "Çiftler halinde — altı katmanın tamamını kapsayan tek sayfalık planı oluşturun. Ardından Kırmızı takım bugünden bir saldırı başlatır; Mavi takım bunu durduran tam katmanı, arkasındaki matematik veya donanımla birlikte adlandırır. Sunmak için elinizi kaldırın."
+      )}
+
+      <div class="card">
+        <h3>◆ The blueprint must show all six layers</h3>
+        <table class="mpu">
+          <tr><th>Layer</th><th>Control from today</th><th>Threat it retires</th></tr>
+          <tr><td>1 · Boundary</td><td>STRIDE-mapped interfaces, CAN allowlist, data diode to DAL A</td><td>Spoofing / tampering at the edge</td></tr>
+          <tr><td>2 · Boot</td><td>Verify-in-RAM chain of trust, OTP revocation, anti-rollback</td><td>TOCTOU flash-swap, key compromise</td></tr>
+          <tr><td>3 · Memory</td><td>Bounds checks + MPU regions, XN stacks, SVC gate</td><td>Overflow → TCB corruption → hazard</td></tr>
+          <tr><td>4 · Debug</td><td>Fused-off JTAG, secure debug auth, RDP</td><td>Firmware dump &amp; key extraction</td></tr>
+          <tr><td>5 · Timing</td><td>Bounded crypto WCET, time partitioning, RTA-proven</td><td>Security-induced deadline miss</td></tr>
+          <tr><td>6 · Evidence</td><td>Every choice backed by math or a hardware primitive</td><td>Ungrounded claims at cert audit</td></tr>
+        </table>
+      </div>
+
+      <div class="rb">
+        <div class="col red"><h4>◇ Red team gauntlet</h4><ul><li>Pick <b>one</b> attack from today.</li><li>Trace it to a physical hazard.</li><li>State the assumption it needs to succeed.</li></ul></div>
+        <div class="col blue"><h4>◇ Blue team defense</h4><ul><li>Name the <b>exact layer</b> that breaks the chain.</li><li>Show the math or hardware fact behind it.</li><li>Confirm it doesn't cost determinism.</li></ul></div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>◆ Re-vote — same four statements as this morning</h3>
+        <p style="font-size:13.5px;color:var(--muted)">Raise your hand again on each statement. Where did the room move? Where a hand changed, ask which station flipped it. That's the retention hook.</p>
+      </div>
+
+      ${navFoot()}
+    `
+  },
+];
+
+/* =========================================================
+   NAV FOOTER
+========================================================= */
+function navFoot(){
+  return `<div class="footctrl">
+    <button class="btn" onclick="go(state.station-1)">◀ Previous</button>
+    <div class="spacer" style="flex:1"></div>
+    <button class="btn cyan" onclick="go(state.station+1)">Next station ▶</button>
+  </div>`;
+}
+
+/* Bilingual scenario + peer instructions block (EN / TR) */
+function brief(scnEn,taskEn,scnTr,taskTr){
+  return `<div class="brief">
+    <div class="brief-hd">▣ Scenario &amp; peer instructions · Senaryo ve eş talimatları</div>
+    <div class="brief-grid">
+      <div class="brief-col"><div class="bl">English</div>
+        <p><b>Scenario.</b> ${scnEn}</p>
+        <p><b>Your task.</b> ${taskEn}</p></div>
+      <div class="brief-col tr"><div class="bl">Türkçe</div>
+        <p><b>Senaryo.</b> ${scnTr}</p>
+        <p><b>Göreviniz.</b> ${taskTr}</p></div>
+    </div>
+  </div>`;
+}
+
+/* =========================================================
+   RENDER
+========================================================= */
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = `<h4>Day 2 · 6.5 hrs · projected</h4>` + stations.map((s,i)=>`
+    <div class="navitem ${i===state.station?'active':''}" onclick="go(${i})">
+      <div class="num">${s.n}</div>
+      <div class="t">${s.nav}<small>${s.sub} · ${s.min}m</small></div>
+    </div>`).join("") +
+    `<h4>Breaks</h4>
+     <div class="navitem" style="cursor:default;opacity:.7"><div class="num">☕</div><div class="t">AM 15m · Lunch 45m · PM 10m<small>insert between stations</small></div></div>`;
+}
+
+function renderMain(){
+  const s = stations[state.station];
+  const main = document.getElementById('main');
+  main.innerHTML = s.render();
+  // wire reveal buttons
+  main.querySelectorAll('.revbtn').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id = 'rev-'+b.dataset.r;
+      const el = document.getElementById(id);
+      el.classList.toggle('show');
+      b.textContent = el.classList.contains('show') ? b.textContent.replace('▾','▴') : b.textContent.replace('▴','▾');
+    });
+  });
+  if(s.mount) s.mount();
+  // reset station timer suggestion
+  stTimerSeconds = s.min*60; renderStTimer(); stopStTimer();
+  document.getElementById('main').scrollTop = 0;
+  window.scrollTo(0,0);
+}
+
+function go(i){
+  if(i<0||i>=stations.length) return;
+  state.station = i;
+  renderRail(); renderMain();
+}
+
+/* =========================================================
+   LEADERBOARD
+========================================================= */
+function renderTeams(){
+  const box = document.getElementById('teams');
+  const sorted = [...state.teams].sort((a,b)=>b.score-a.score);
+  box.innerHTML = state.teams.map(t=>`
+    <div class="team" id="team-${t.id}">
+      <div class="row1">
+        <span class="dot" style="background:${t.color}"></span>
+        <span class="nm">${t.name}</span>
+        <span class="sc">${t.score}</span>
+      </div>
+      <div class="ctrl">
+        <button class="btn sm" onclick="score(${t.id},1)">+1</button>
+        <button class="btn sm" onclick="score(${t.id},5)">+5</button>
+        <button class="btn sm" onclick="score(${t.id},10)">+10</button>
+        <button class="btn sm ghost" onclick="score(${t.id},-1)">−</button>
+        <button class="btn sm ghost" onclick="delTeam(${t.id})">✕</button>
+      </div>
+    </div>`).join("");
+}
+function score(id,d){
+  const t = state.teams.find(x=>x.id===id); if(!t) return;
+  t.score = Math.max(0,t.score+d);
+  renderTeams();
+  const el = document.getElementById('team-'+id);
+  if(el){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+}
+function delTeam(id){ state.teams = state.teams.filter(x=>x.id!==id); renderTeams(); }
+document.getElementById('addTeam').addEventListener('click',addTeam);
+document.getElementById('teamName').addEventListener('keydown',e=>{if(e.key==='Enter')addTeam();});
+function addTeam(){
+  const inp = document.getElementById('teamName');
+  const name = inp.value.trim(); if(!name) return;
+  state.teams.push({id:state.nextTeam++, name, score:0, color:palette[(state.teams.length)%palette.length]});
+  inp.value=''; renderTeams();
+}
+
+/* =========================================================
+   DAY CLOCK
+========================================================= */
+let dayRunning=false, daySeconds=0, dayInt=null;
+document.getElementById('dayToggle').addEventListener('click',()=>{
+  dayRunning=!dayRunning;
+  const b=document.getElementById('dayToggle'), c=document.getElementById('dayClock');
+  if(dayRunning){ b.textContent='❚❚ Day'; c.classList.add('run');
+    dayInt=setInterval(()=>{daySeconds++;renderDayClock();},1000);
+  } else { b.textContent='▶ Day'; c.classList.remove('run'); clearInterval(dayInt); }
+});
+function renderDayClock(){
+  const h=String(Math.floor(daySeconds/3600)).padStart(2,'0');
+  const m=String(Math.floor(daySeconds%3600/60)).padStart(2,'0');
+  const s=String(daySeconds%60).padStart(2,'0');
+  document.getElementById('dayClock').textContent=`${h}:${m}:${s}`;
+}
+
+/* =========================================================
+   STATION TIMER (countdown suggestion)
+========================================================= */
+let stTimerSeconds=45*60, stInt=null, stRunning=false;
+function renderStTimer(){
+  const m=String(Math.floor(stTimerSeconds/60)).padStart(2,'0');
+  const s=String(stTimerSeconds%60).padStart(2,'0');
+  document.getElementById('stTime').textContent=`${m}:${s}`;
+}
+function stopStTimer(){ stRunning=false; clearInterval(stInt); document.getElementById('startTimer').textContent='Start station'; }
+document.getElementById('startTimer').addEventListener('click',()=>{
+  stRunning=!stRunning;
+  const b=document.getElementById('startTimer');
+  if(stRunning){ b.textContent='Pause';
+    stInt=setInterval(()=>{ if(stTimerSeconds>0){stTimerSeconds--;renderStTimer();} else {stopStTimer();} },1000);
+  } else stopStTimer();
+});
+document.getElementById('resetTimer').addEventListener('click',()=>{ stTimerSeconds=stations[state.station].min*60; renderStTimer(); stopStTimer(); });
+
+/* Reveal-all keys */
+document.getElementById('revealAll').addEventListener('click',()=>{
+  document.querySelectorAll('.reveal').forEach(r=>r.classList.add('show'));
+});
+
+/* =========================================================
+   STATION 2 — BOOT ORDER + TOCTOU
+========================================================= */
+function mountBoot(){
+  const correct = [
+    "CPU leaves reset, executes immutable Boot ROM",
+    "Copy public key from external flash into internal secure RAM",
+    "Hash the RAM copy, compare to root hash in OTP fuses",
+    "Copy FSBL into secure RAM, verify its signature with the trusted key",
+    "Check OTP revocation bitmask for the signing slot",
+    "Transfer control (PC → FSBL) — or enter safe recovery",
+  ];
+  // shuffled display order
+  const shuffled = [3,0,5,2,1,4];
+  const host = document.getElementById('bootSteps');
+  host.innerHTML='';
+  shuffled.forEach(idx=>{
+    const d=document.createElement('div');
+    d.className='step'; d.draggable=true; d.dataset.correct=idx;
+    d.innerHTML=`<span class="h">≡</span><span>${correct[idx]}</span>`;
+    host.appendChild(d);
+  });
+  enableDrag(host);
+  document.getElementById('checkBoot').onclick=()=>{
+    const kids=[...host.children]; let ok=true;
+    kids.forEach((k,i)=>{
+      k.classList.remove('ok','bad');
+      const good = Number(k.dataset.correct)===i;
+      k.classList.add(good?'ok':'bad'); if(!good) ok=false;
+      k.querySelector('.h').textContent=i+1;
+    });
+    const msg=document.getElementById('bootMsg');
+    msg.textContent= ok?'✓ Chain of trust correct — check happens in RAM, then transfer.':'✗ Not yet — remember: copy to secure RAM before you verify.';
+    msg.style.color= ok?'var(--green)':'var(--red)';
+  };
+
+  // TOCTOU options
+  const opts=[
+    {t:"Verify the key in external flash, then execute from flash directly", ok:false, why:"This is the vulnerability — an emulator can swap bus contents between check and use."},
+    {t:"Copy key + image into internal secure RAM, verify there, execute from there", ok:true, why:"Check and use hit the same trusted memory — the swap window is gone."},
+    {t:"Just verify the signature twice on the external bus", ok:false, why:"Two checks on untrusted memory still leave a use-after-check swap window."},
+    {t:"Disable the SPI bus after boot", ok:false, why:"Doesn't help — the swap happens during the boot check, not after."},
+  ];
+  const oh=document.getElementById('toctouOpts'); oh.innerHTML='';
+  opts.forEach(o=>{
+    const d=document.createElement('div'); d.className='opt';
+    d.innerHTML=`${o.t}<div class="why">${o.why}</div>`;
+    d.onclick=()=>{ d.classList.toggle(o.ok?'correct':'wrong'); };
+    oh.appendChild(d);
+  });
+}
+
+/* =========================================================
+   STATION 3 — PARSER (click the vulnerable line)
+========================================================= */
+function mountParser(){
+  const lines = [
+    {t:'<span class="kw">void</span> parse_telemetry(uint8_t *frame, <span class="kw">int</span> len) {', v:false},
+    {t:'    uint8_t rx_buf[<span class="str">256</span>];              <span class="cmt">// fixed destination</span>', v:false},
+    {t:'    <span class="kw">struct</span> tcb *next = task_list-&gt;next;  <span class="cmt">// adjacent in memory</span>', v:false},
+    {t:'    memcpy(rx_buf, frame, len);      <span class="cmt">// &lt;-- attacker controls len</span>', v:true},
+    {t:'    decode(rx_buf);', v:false},
+    {t:'}', v:false},
+  ];
+  const host=document.getElementById('parserCode'); host.innerHTML='';
+  lines.forEach((l,i)=>{
+    const span=document.createElement('div');
+    span.innerHTML = `<span style="color:#4d6a8f">${String(i+1).padStart(2,' ')}</span>  ` +
+      (l.v? `<span class="vuln">${l.t}</span>` : l.t);
+    if(l.v){
+      span.querySelector('.vuln').onclick=(e)=>{
+        e.target.classList.add('found');
+        const m=document.getElementById('parserMsg');
+        m.textContent='✓ Found it. Unbounded memcpy into a 256-byte buffer — a 300-byte frame overruns into the TCB.';
+        m.style.color='var(--green)';
+      };
+    }
+    host.appendChild(span);
+  });
+  // wrong-click feedback
+  host.querySelectorAll('div').forEach(d=>{
+    if(!d.querySelector('.vuln')){
+      d.style.cursor='pointer';
+      d.onclick=()=>{ const m=document.getElementById('parserMsg'); m.textContent='Not the bug — look for the copy with no bounds check.'; m.style.color='var(--amber)'; };
+    }
+  });
+}
+
+/* =========================================================
+   STATION 4 — MPU TABLE
+========================================================= */
+function mountMPU(){
+  // each region: attributes user toggles; target defines the secure config
+  const regions=[
+    {name:"R0 · DAL A Flight Control", target:{priv:true, xnOthers:true}, priv:false, xnOthers:false},
+    {name:"R1 · Parser task stack",    target:{np:true, xn:true},        np:false, xn:false},
+    {name:"R2 · SPI / peripherals",    target:{privOnly:true},           privOnly:false},
+    {name:"R3 · Background (unmapped)", target:{disabled:true},          disabled:false},
+  ];
+  const T=document.getElementById('mpuTable');
+  function draw(){
+    T.innerHTML = `<tr><th>Region</th><th>Attribute A</th><th>Attribute B</th></tr>` +
+    regions.map((r,i)=>{
+      let a='',b='';
+      if(i===0){ a=tog('Privileged access', r.priv, `regTog(0,'priv')`); b=tog('Execute-never for others', r.xnOthers, `regTog(0,'xnOthers')`);}
+      if(i===1){ a=tog('Non-privileged RW', r.np, `regTog(1,'np')`); b=tog('XN (execute-never)', r.xn, `regTog(1,'xn')`);}
+      if(i===2){ a=tog('Privileged-only', r.privOnly, `regTog(2,'privOnly')`); b='<span style="color:var(--muted)">—</span>';}
+      if(i===3){ a=tog('Region disabled (fault on access)', r.disabled, `regTog(3,'disabled')`); b='<span style="color:var(--muted)">—</span>';}
+      return `<tr><td>${r.name}</td><td>${a}</td><td>${b}</td></tr>`;
+    }).join("");
+  }
+  function tog(label,on,fn){
+    return `<span class="toggle ${on?'on':'off'}" onclick="${fn}">${label}: ${on?'ON':'OFF'}</span>`;
+  }
+  window.regTog=(i,k)=>{ regions[i][k]=!regions[i][k]; draw(); check(); };
+  function check(){
+    const ok = regions[0].priv&&regions[0].xnOthers&&regions[1].np&&regions[1].xn&&regions[2].privOnly&&regions[3].disabled;
+    const m=document.getElementById('mpuMsg');
+    if(ok){ m.textContent='✓ Isolation holds. Parser can neither execute its stack nor reach DAL A; unmapped access faults.'; m.style.color='var(--green)'; }
+    else { m.textContent='Config still leaky — the parser must be XN and DAL A must be execute-never to everyone else.'; m.style.color='var(--amber)'; }
+  }
+  draw(); check();
+}
+
+/* =========================================================
+   STATION 5 — JTAG ATTACK CHAIN
+========================================================= */
+function mountJtag(){
+  const correct=[
+    "Connect J-Link probe to the Cortex-M debug header",
+    "Halt the core with GDB and read live memory",
+    "Dump internal flash to a .bin image",
+    "Decompile / reverse-engineer the firmware",
+    "Extract signing and root keys from the dump",
+  ];
+  const shuffled=[2,0,4,1,3];
+  const host=document.getElementById('jtagSteps'); host.innerHTML='';
+  shuffled.forEach(idx=>{
+    const d=document.createElement('div'); d.className='step'; d.draggable=true; d.dataset.correct=idx;
+    d.innerHTML=`<span class="h">≡</span><span>${correct[idx]}</span>`;
+    host.appendChild(d);
+  });
+  enableDrag(host);
+  document.getElementById('checkJtag').onclick=()=>{
+    const kids=[...host.children]; let ok=true;
+    kids.forEach((k,i)=>{ k.classList.remove('ok','bad'); const good=Number(k.dataset.correct)===i; k.classList.add(good?'ok':'bad'); if(!good)ok=false; k.querySelector('.h').textContent=i+1; });
+    const m=document.getElementById('jtagMsg');
+    m.textContent= ok?'✓ Attack chain ordered — now Blue team kills each step.':'✗ Reorder — physical access first, keys last.';
+    m.style.color= ok?'var(--green)':'var(--red)';
+  };
+}
+
+/* =========================================================
+   STATION 2 — FREERTOS KERNEL THREAT MODEL
+========================================================= */
+function mountKernelTM(){
+  /* ---- Challenge A: authorization matrix ---- */
+  const cycle=["–","R","RW","RX","RWX"];
+  const cols=["App code","Own stack","Kernel objects","MPU ctrl reg","Peripheral regs"];
+  const rows=[
+    {a:"Unprivileged task", target:["RX","RW","–","–","–"]},
+    {a:"Privileged task",   target:["RX","RW","RW","RW","RW"]},
+    {a:"ISR",               target:["RX","–","RW","–","RW"]},
+    {a:"Peripheral (DMA)",  target:["–","–","–","–","RW"]},
+  ];
+  const cur = rows.map(r=>r.target.map(()=>0)); // all start at "–"
+  const T=document.getElementById('authTable');
+  function draw(){
+    T.innerHTML = `<tr><th>Actor \\ Asset</th>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>` +
+      rows.map((r,ri)=>`<tr><td><b>${r.a}</b></td>${r.target.map((_,ci)=>{
+        const val=cycle[cur[ri][ci]];
+        const ok=val===r.target[ci];
+        return `<td style="text-align:center"><span class="toggle ${val==='–'?'off':'on'}" onclick="authTog(${ri},${ci})" style="min-width:44px;display:inline-block">${val}</span></td>`;
+      }).join("")}</tr>`).join("");
+  }
+  window.authTog=(ri,ci)=>{ cur[ri][ci]=(cur[ri][ci]+1)%cycle.length; draw(); check(); };
+  function check(){
+    let ok=true;
+    rows.forEach((r,ri)=>r.target.forEach((t,ci)=>{ if(cycle[cur[ri][ci]]!==t) ok=false; }));
+    const m=document.getElementById('authMsg');
+    if(ok){ m.textContent='✓ Matches the Cortex-M / ThreadX authorization table — unprivileged threads touch only their code (RX) and own stack (RW).'; m.style.color='var(--green)'; }
+    else { m.textContent='Keep cycling cells (click to change R/W/X). Hint: an unprivileged task gets RX on code, RW on its own stack, nothing else.'; m.style.color='var(--amber)'; }
+  }
+  draw(); check();
+
+  /* ---- Challenge B: threat → mitigation matching ---- */
+  const pairs=[
+    {th:"Access-privilege violation", mi:"MPU reprogrammed at scheduler start + every context switch"},
+    {th:"Stack overflow", mi:"MPU region sized/aligned to the stack — overflow faults"},
+    {th:"Physical attack", mi:"App-writer physical protections / restricted deployment"},
+    {th:"Source-code modification", mi:"Do not modify the certified RTOS kernel source"},
+    {th:"Binary modification", mi:"Root of trust + secure boot + signature verification"},
+  ];
+  const host=document.getElementById('tmMatch');
+  const shuffledMi=[...pairs.keys()].sort(()=>Math.random()-0.5);
+  host.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div id="thCol"></div><div id="miCol"></div></div>`;
+  const thCol=host.querySelector('#thCol'), miCol=host.querySelector('#miCol');
+  pairs.forEach((p,i)=>{
+    const d=document.createElement('div'); d.className='opt'; d.dataset.i=i; d.textContent=p.th;
+    d.style.marginBottom='8px'; d.onclick=()=>selectTh(i,d); thCol.appendChild(d);
+  });
+  shuffledMi.forEach(i=>{
+    const d=document.createElement('div'); d.className='opt'; d.dataset.i=i; d.textContent=pairs[i].mi;
+    d.style.marginBottom='8px'; d.onclick=()=>selectMi(i,d); miCol.appendChild(d);
+  });
+  let pickTh=null, pickThEl=null, solved=0;
+  function selectTh(i,el){
+    if(el.classList.contains('correct'))return;
+    thCol.querySelectorAll('.opt').forEach(o=>{ if(!o.classList.contains('correct'))o.style.borderColor='var(--line)';});
+    pickTh=i; pickThEl=el; el.style.borderColor='var(--cyan)';
+  }
+  function selectMi(i,el){
+    if(el.classList.contains('correct'))return;
+    if(pickTh===null){ document.getElementById('tmMsg').textContent='Pick a threat first, then its mitigation.'; document.getElementById('tmMsg').style.color='var(--amber)'; return; }
+    if(i===pickTh){
+      el.classList.add('correct'); pickThEl.classList.add('correct');
+      pickThEl.style.borderColor=''; solved++;
+      const m=document.getElementById('tmMsg');
+      if(solved===pairs.length){ m.textContent='✓ All five kernel-owned threats mapped. The remaining two (source & binary integrity) the app writer owns.'; m.style.color='var(--green)'; }
+      else { m.textContent=`✓ ${solved}/${pairs.length} matched.`; m.style.color='var(--green)'; }
+    } else {
+      el.classList.add('wrong'); setTimeout(()=>el.classList.remove('wrong'),500);
+      document.getElementById('tmMsg').textContent='Not that pair — think about which asset the mitigation protects.'; document.getElementById('tmMsg').style.color='var(--red)';
+    }
+    pickTh=null; pickThEl=null;
+  }
+}
+
+/* =========================================================
+   CODE LAB — navigable ThreadX-style Cortex-M kernel
+========================================================= */
+const cnUnits = {
+  app: { file:"app.c", title:"app.c — application: create threads", lang:"c",
+    note:"Entry point. A trusted DAL-A actuation thread, plus an untrusted telemetry parser that runs as an unprivileged ThreadX Module. Click <b>tx_thread_create</b> to drill down.",
+    lines:[
+      {code:"/* Cortex-M avionics gateway — application startup. */"},
+      {code:"void app_define(void *unused)"},
+      {code:"{"},
+      {code:"    /* DAL-A actuation thread: highest priority, fully trusted. */"},
+      {code:"    tx_thread_create(&actuation_tcb, \"actuation\", actuation_entry,", links:[["tx_thread_create","thread_create"]]},
+      {code:"                     stack_act, STACK_SZ, PRIO_HIGH, PRIO_HIGH,"},
+      {code:"                     TX_NO_TIME_SLICE, TX_AUTO_START);"},
+      {code:""},
+      {code:"    /* Untrusted parser: launched as an UNPRIVILEGED module. */"},
+      {code:"    txm_module_manager_start(&parser_module);", links:[["txm_module_manager_start","svc"]], focus:"Unprivileged code — every kernel call it makes must go through the SVC gate."},
+      {code:"}"},
+    ]},
+
+  thread_create: { file:"tx_thread_create.c", title:"tx_thread_create() — build a thread", lang:"c",
+    note:"<span class='cn-tag'>S2C</span>The control block is stamped with <b>tx_thread_id</b> — the anti-masquerading type check. <span class='cn-tag'>S4</span><b>tx_thread_stack_ptr</b> is the saved SP; corrupt it and you own the thread. <span class='cn-tag'>S2B</span>stack start/end size the per-thread MPU region.",
+    lines:[
+      {code:"UINT tx_thread_create(TX_THREAD *tcb, CHAR *name, VOID (*entry)(ULONG),", links:[["TX_THREAD","tcb"]]},
+      {code:"                      VOID *stack, ULONG size, UINT prio, UINT preempt,"},
+      {code:"                      ULONG slice, UINT auto_start)"},
+      {code:"{"},
+      {code:"    tcb->tx_thread_id = TX_THREAD_ID;         // 0x54484524 type stamp", focus:"Object-ID stamp. The SVC gate and every API check this to block masquerading (Station 2C)."},
+      {code:""},
+      {code:"    tcb->tx_thread_stack_start = stack;       // \\  bounds used to size"},
+      {code:"    tcb->tx_thread_stack_end   = stack+size-1;// /  the MPU stack region", focus:"MPU region 0 will be sized to exactly this stack, so an overflow faults (Station 2B)."},
+      {code:"    tcb->tx_thread_stack_ptr   = build_frame(stack, entry);  // saved SP", focus:"The saved stack pointer. Overwrite this via overflow and the next switch jumps anywhere (Station 4)."},
+      {code:""},
+      {code:"    _tx_thread_resume(tcb);                   // make it schedulable", links:[["_tx_thread_resume","schedule"]]},
+      {code:"    return TX_SUCCESS;"},
+      {code:"}"},
+    ]},
+
+  tcb: { file:"tx_api.h", title:"TX_THREAD — the thread control block (TCB)", lang:"c",
+    note:"<span class='cn-tag'>S4</span><b>tx_thread_stack_ptr</b> is restored on every context switch. An overflow that reaches this field redirects execution on the next switch — the exact Station 4 chain. <span class='cn-tag'>S2C</span><b>tx_thread_id</b> is the type stamp checked to stop object masquerading.",
+    lines:[
+      {code:"typedef struct TX_THREAD_STRUCT"},
+      {code:"{"},
+      {code:"    ULONG   tx_thread_id;          // type stamp: must == TX_THREAD_ID", focus:"Anti-masquerading type ID (Station 2C)."},
+      {code:"    VOID   *tx_thread_stack_ptr;   // saved SP — restored on switch", focus:"Corrupt this = hijack the thread (Station 4)."},
+      {code:"    VOID   *tx_thread_stack_start; // \\  bounds programmed into the"},
+      {code:"    VOID   *tx_thread_stack_end;   // /  per-thread MPU stack region"},
+      {code:"    UINT    tx_thread_priority;    // 0 = highest (Rate-Monotonic)"},
+      {code:"    UINT    tx_thread_state;       // READY / SUSPENDED / TERMINATED"},
+      {code:"    struct TX_THREAD_STRUCT *tx_thread_ready_next;  // ready-list link"},
+      {code:"} TX_THREAD;"},
+    ]},
+
+  schedule: { file:"tx_thread_schedule.c", title:"_tx_thread_schedule() — pick the winner", lang:"c",
+    note:"Deterministic O(1) selection of the highest-priority ready thread — the timing-safety property from Day 1. It then hands off to the architecture context switch. Click <b>_tx_thread_context_switch</b>.",
+    lines:[
+      {code:"VOID _tx_thread_schedule(VOID)"},
+      {code:"{"},
+      {code:"    /* Highest-priority READY thread wins — deterministic. */"},
+      {code:"    _tx_thread_execute_ptr = _tx_highest_ready_thread();"},
+      {code:""},
+      {code:"    /* Hand off to the Cortex-M context switch (PendSV). */"},
+      {code:"    _tx_thread_context_switch();", links:[["_tx_thread_context_switch","pendsv"]]},
+      {code:"}"},
+    ]},
+
+  pendsv: { file:"tx_thread_context.S", title:"PendSV_Handler — the context switch", lang:"asm",
+    note:"<span class='cn-tag'>S5</span>The <b>BL _tx_mpu_reprogram</b> on the incoming path re-applies the MPU on EVERY switch, so isolation travels with the thread. <span class='cn-tag'>S4</span><b>STR r0,[r1]</b> stores the SP into the outgoing TCB — the field an overflow corrupts.",
+    lines:[
+      {code:"PendSV_Handler:                ; lowest-priority exception = safe switch"},
+      {code:"    CPSID   i                  ; mask interrupts (short critical region)"},
+      {code:"    MRS     r0, PSP            ; outgoing thread's stack pointer"},
+      {code:"    STMDB   r0!, {r4-r11}      ; save callee-saved registers"},
+      {code:"    STR     r0, [r1]           ; store SP into outgoing TCB.stack_ptr", focus:"This is the tx_thread_stack_ptr that a stack overflow corrupts (Station 4)."},
+      {code:""},
+      {code:"    LDR     r3, =_tx_thread_execute_ptr  ; incoming thread TCB"},
+      {code:"    BL      _tx_mpu_reprogram  ; reprogram MPU for the INCOMING thread", links:[["_tx_mpu_reprogram","mpu"]], focus:"Isolation is re-applied on EVERY switch — the guarantee behind Station 5."},
+      {code:"    LDR     r0, [r3, #STK_PTR] ; incoming SP from its TCB"},
+      {code:"    LDMIA   r0!, {r4-r11}      ; restore its registers"},
+      {code:"    MSR     PSP, r0"},
+      {code:"    CPSIE   i"},
+      {code:"    BX      lr                 ; return into the incoming thread"},
+    ]},
+
+  mpu: { file:"tx_mpu.c", title:"_tx_mpu_reprogram() — per-thread isolation", lang:"c",
+    note:"<span class='cn-tag'>S5</span>This is the Station 5 board in code. Stack region is RW + <b>execute-never</b> and sized to the stack (Station 2B). Peripherals are privileged-only. Background disabled so any unmapped access faults.",
+    lines:[
+      {code:"VOID _tx_mpu_reprogram(TX_THREAD *tcb)", links:[["TX_THREAD","tcb"]]},
+      {code:"{"},
+      {code:"    /* R0: this thread's stack — RW, execute-never, sized to the stack. */"},
+      {code:"    mpu_set_region(0, tcb->tx_thread_stack_start,"},
+      {code:"                      tcb->tx_thread_stack_end,"},
+      {code:"                      MPU_RW | MPU_XN | MPU_NON_PRIV);", focus:"Execute-never stack stops injected shellcode from running (Station 4)."},
+      {code:""},
+      {code:"    /* R1: application code — read + execute only, never writable. */"},
+      {code:"    mpu_set_region(1, code_start, code_end, MPU_RO | MPU_EXEC);"},
+      {code:""},
+      {code:"    /* R2: peripherals — privileged access only. */"},
+      {code:"    mpu_set_region(2, PERIPH_BASE, PERIPH_END,"},
+      {code:"                      MPU_RW | MPU_PRIV_ONLY | MPU_XN);"},
+      {code:""},
+      {code:"    mpu_disable_background();   // unmapped access -> MemManage fault", focus:"Deny-by-default: anything not in a region faults (Station 5, region R3)."},
+      {code:"}"},
+    ]},
+
+  svc: { file:"tx_svc.c", title:"SVC_Handler — the trust-boundary gate", lang:"c",
+    note:"<span class='cn-tag'>S2</span>The single trust-boundary crossing. <b>object_belongs()</b> authorizes the target (Station 2C), and privilege is raised then <b>ALWAYS dropped</b> — leaving it raised is the classic ROP escalation bug.",
+    lines:[
+      {code:"/* The ONLY controlled path from an unprivileged thread into the kernel. */"},
+      {code:"void SVC_Handler(uint32_t *args)"},
+      {code:"{"},
+      {code:"    uint32_t service_id = args[0];"},
+      {code:"    void    *object_ptr = (void *)args[1];"},
+      {code:""},
+      {code:"    if (!valid_service(service_id))    fault(TX_SVC_DENIED);"},
+      {code:"    if (!object_belongs(object_ptr, current_thread))", focus:"Authorization check: is this thread allowed to touch this object? Blocks masquerading (Station 2C)."},
+      {code:"                                       fault(TX_ACCESS_ERROR);"},
+      {code:""},
+      {code:"    raise_privilege();             // enter kernel with full rights", focus:"Privilege is raised here..."},
+      {code:"    dispatch_service(service_id, args);", links:[["dispatch_service","sem"]]},
+      {code:"    drop_privilege();              // ...and ALWAYS dropped before return", focus:"...and must ALWAYS be dropped. Forgetting this is the ROP privilege-escalation bug."},
+      {code:"}"},
+    ]},
+
+  sem: { file:"tx_semaphore_get.c", title:"tx_semaphore_get() — object-ID validation", lang:"c",
+    note:"<span class='cn-tag'>S2C</span>The real anti-masquerading line in the source: reject any control block whose <b>tx_semaphore_id != TX_SEMAPHORE_ID</b>. A forged or adjacent block returns <b>TX_SEMAPHORE_ERROR</b> instead of being acted on.",
+    lines:[
+      {code:"UINT tx_semaphore_get(TX_SEMAPHORE *sem, ULONG wait)"},
+      {code:"{"},
+      {code:"    /* Anti-masquerading: is this really a semaphore control block? */"},
+      {code:"    if (sem == TX_NULL || sem->tx_semaphore_id != TX_SEMAPHORE_ID)", focus:"The KOM defense in real code: type-stamp check rejects forged/adjacent blocks (Station 2C)."},
+      {code:"        return TX_SEMAPHORE_ERROR;"},
+      {code:""},
+      {code:"    TX_DISABLE                     // short critical section"},
+      {code:"    if (sem->tx_semaphore_count != 0) {"},
+      {code:"        sem->tx_semaphore_count--; // acquired"},
+      {code:"        TX_RESTORE"},
+      {code:"        return TX_SUCCESS;"},
+      {code:"    }"},
+      {code:"    TX_RESTORE"},
+      {code:"    return suspend_current_thread(sem, wait);", links:[["suspend_current_thread","schedule"]]},
+      {code:"}"},
+    ]},
+};
+
+const cnTree = [
+  {group:"Application", items:[["app","app.c"]]},
+  {group:"Kernel core", items:[["thread_create","tx_thread_create()"],["tcb","TX_THREAD (TCB)"],["schedule","_tx_thread_schedule()"]]},
+  {group:"Arch · Cortex-M", items:[["pendsv","PendSV_Handler"],["mpu","_tx_mpu_reprogram()"],["svc","SVC_Handler (gate)"]]},
+  {group:"Objects", items:[["sem","tx_semaphore_get()"]]},
+];
+
+let cnStack = ["app"];
+
+function escHtml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); }
+
+function cnRenderLine(line, commentChar, idx){
+  let raw = line.code;
+  let codePart = raw, cmt = "";
+  const ci = raw.indexOf(commentChar);
+  if(ci >= 0){ codePart = raw.slice(0,ci); cmt = raw.slice(ci); }
+  let html = escHtml(codePart);
+  if(line.links){
+    line.links.forEach(([tok,to])=>{
+      const re = new RegExp("\\b"+escRe(escHtml(tok))+"\\b","g");
+      html = html.replace(re, `<span class="cn-lnk" onclick="cnGo('${to}')">${escHtml(tok)}</span>`);
+    });
+  }
+  const cmtHtml = cmt ? `<span class="cn-cmt">${escHtml(cmt)}</span>` : "";
+  const num = String(idx+1).padStart(2," ");
+  return `<div class="cn-line ${line.focus?'cn-focus':''}"><span class="ln">${num}</span>  ${html}${cmtHtml}</div>`;
+}
+
+function cnRender(){
+  const id = cnStack[cnStack.length-1];
+  const u = cnUnits[id];
+  const cc = u.lang==="asm" ? ";" : "//";
+  // tree
+  document.getElementById('cnTree').innerHTML = cnTree.map(g=>
+    `<div class="fh">${g.group}</div>` + g.items.map(([iid,label])=>
+      `<div class="cn-sym ${iid===id?'active':''}" onclick="cnJump('${iid}')"><span class="fx">${iid===id?'▸':'·'}</span>${label}</div>`
+    ).join("")
+  ).join("");
+  // crumb
+  document.getElementById('cnCrumb').innerHTML =
+    (cnStack.length>1 ? `<span class="c" onclick="cnBack()">◀ back</span> · ` : "") +
+    cnStack.map((s,i)=>`<span class="c" onclick="cnCrumbTo(${i})">${cnUnits[s].file}</span>`).join(" <span style='color:var(--muted)'>›</span> ");
+  // title + code
+  document.getElementById('cnTitle').textContent = u.title;
+  document.getElementById('cnCode').innerHTML = u.lines.map((l,i)=>cnRenderLine(l,cc,i)).join("");
+  document.getElementById('cnNote').innerHTML = u.note;
+}
+window.cnGo = (to)=>{ if(cnStack[cnStack.length-1]!==to) cnStack.push(to); cnRender(); };
+window.cnJump = (id)=>{ cnStack=[id]; cnRender(); };
+window.cnBack = ()=>{ if(cnStack.length>1) cnStack.pop(); cnRender(); };
+window.cnCrumbTo = (i)=>{ cnStack = cnStack.slice(0,i+1); cnRender(); };
+
+function mountCodeNav(){ cnStack = ["app"]; cnRender(); dbgInit(); cnMode('nav'); }
+
+/* =========================================================
+   LIVE DEBUGGER — watch the exploit chain fire
+========================================================= */
+window.cnMode = (m)=>{
+  document.getElementById('cnNavigate').style.display = m==='nav'?'block':'none';
+  document.getElementById('cnDebug').style.display    = m==='dbg'?'block':'none';
+  document.getElementById('modeNav').classList.toggle('on', m==='nav');
+  document.getElementById('modeDbg').classList.toggle('on', m==='dbg');
+  if(m==='dbg') dbgRender();
+};
+
+/* register presets */
+const R = { PARSE:"0x08001A2C", PENDSV:"0x08000C40", MM:"0x08000E80",
+            SPOK:"0x20009F80", SPBAD:"0x41414141", LR:"0x08001A31",
+            PSR:"0x21000000", SHELL:"0x20009F40" };
+
+const SCEN = {
+  A: {
+    file:"parse_telemetry.c / tx_thread_context.S",
+    defLabel:"Bounds check",
+    off:{
+      code:[
+        "parse_telemetry:",
+        "  memcpy(rx_buf, frame, len);      // len=300  rx_buf=256",
+        "  /* 44 bytes spill past rx_buf */",
+        "PendSV_Handler:                    // next context switch",
+        "  LDR   r0, [r3, #STK_PTR]         // SP <- TCB.stack_ptr",
+        "  LDMIA r0!, {r4-r11}             // restore regs from SP",
+        "  BX    lr                         // PC <- restored stack",
+      ],
+      frames:[
+        {line:1, regs:{pc:R.PARSE, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"0x00…(empty)",s:""},{l:"TCB.tx_thread_stack_ptr",v:R.SPOK,s:"intact"}],
+          log:{t:"Parser received a 300-byte telemetry frame.",k:""}},
+        {line:1, regs:{pc:R.PARSE, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"41 41 41 … (filled)",s:"written"},{l:"TCB.tx_thread_stack_ptr",v:R.SPOK,s:"intact"}],
+          log:{t:"memcpy: writing 300 bytes into a 256-byte buffer…",k:""}},
+        {line:2, regs:{pc:R.PARSE, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"41 41 41 … (filled)",s:"written"},{l:"TCB.tx_thread_stack_ptr",v:R.SPBAD,s:"corrupt"}],
+          log:{t:"Overflow! 44 bytes past rx_buf overwrote tx_thread_stack_ptr = 0x41414141.",k:"danger"}},
+        {line:4, regs:{pc:R.PENDSV, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"41 41 41 …",s:"written"},{l:"TCB.tx_thread_stack_ptr",v:R.SPBAD,s:"corrupt"}],
+          log:{t:"SysTick → PendSV: switching back to the parser thread.",k:""}},
+        {line:4, regs:{pc:R.PENDSV, sp:R.SPBAD, lr:R.LR, psr:R.PSR}, hi:{sp:"bad"},
+          cells:[{l:"rx_buf[256]",v:"41 41 41 …",s:"written"},{l:"TCB.tx_thread_stack_ptr",v:R.SPBAD,s:"corrupt"}],
+          log:{t:"LDR r0,[r3,#STK_PTR] → SP = 0x41414141 (attacker-controlled).",k:"danger"}},
+        {line:6, regs:{pc:R.SPBAD, sp:R.SPBAD, lr:R.LR, psr:R.PSR}, hi:{pc:"bad",sp:"bad"},
+          cells:[{l:"rx_buf[256]",v:"41 41 41 …",s:"written"},{l:"TCB.tx_thread_stack_ptr",v:R.SPBAD,s:"corrupt"}],
+          log:{t:"BX lr → PC = 0x41414141. Arbitrary execution inside a hard-real-time task.",k:"danger"},
+          banner:{k:"bad",t:"EXPLOIT SUCCEEDED — actuation deadline missed → physical hazard"}},
+      ],
+    },
+    on:{
+      code:[
+        "parse_telemetry:",
+        "  if (len > sizeof rx_buf)         // 300 > 256",
+        "      return REJECT;               // drop the frame",
+        "  memcpy(rx_buf, frame, len);      // not reached",
+        "PendSV_Handler:                    // next context switch",
+        "  LDR   r0, [r3, #STK_PTR]         // SP <- TCB.stack_ptr (intact)",
+        "  BX    lr                         // clean return",
+      ],
+      frames:[
+        {line:1, regs:{pc:R.PARSE, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"0x00…(empty)",s:""},{l:"TCB.tx_thread_stack_ptr",v:R.SPOK,s:"intact"}],
+          log:{t:"Parser received a 300-byte telemetry frame.",k:""}},
+        {line:1, regs:{pc:R.PARSE, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"0x00…(empty)",s:""},{l:"TCB.tx_thread_stack_ptr",v:R.SPOK,s:"intact"}],
+          log:{t:"Bounds check: len = 300, sizeof rx_buf = 256.",k:""}},
+        {line:2, regs:{pc:R.PARSE, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"0x00…(untouched)",s:"intact"},{l:"TCB.tx_thread_stack_ptr",v:R.SPOK,s:"intact"}],
+          log:{t:"300 > 256 → frame REJECTED. memcpy skipped, rx_buf untouched.",k:"good"}},
+        {line:5, regs:{pc:R.PENDSV, sp:R.SPOK, lr:R.LR, psr:R.PSR},
+          cells:[{l:"rx_buf[256]",v:"0x00…(untouched)",s:"intact"},{l:"TCB.tx_thread_stack_ptr",v:R.SPOK,s:"intact"}],
+          log:{t:"Context switch: SP restored from an intact TCB.",k:""}},
+        {line:6, regs:{pc:R.PARSE, sp:R.SPOK, lr:R.LR, psr:R.PSR}, hi:{sp:"good"},
+          cells:[{l:"rx_buf[256]",v:"0x00…(untouched)",s:"intact"},{l:"TCB.tx_thread_stack_ptr",v:R.SPOK,s:"intact"}],
+          log:{t:"Clean return into the parser. No corruption, timing preserved.",k:"good"},
+          banner:{k:"good",t:"ATTACK BLOCKED — one bounds check kept the schedule deterministic"}},
+      ],
+    },
+  },
+  B: {
+    file:"tx_mpu.c / MemManage_Handler",
+    defLabel:"MPU execute-never (XN)",
+    on:{
+      code:[
+        "; control flow reached shellcode on the stack",
+        "  0x20009F40:  <attacker shellcode>",
+        "; CPU instruction fetch from 0x20009F40",
+        "  MPU region 0 (stack): RW | XN | NP",
+        "  -> MemManage_Handler   (IACCVIOL)",
+      ],
+      mpu:[{r:"R0 stack",a:"RW | XN | NP"},{r:"R1 code",a:"RO | EXEC"},{r:"R2 periph",a:"PRIV | XN"}],
+      frames:[
+        {line:1, regs:{pc:R.SHELL, sp:R.SPOK, lr:R.LR, psr:R.PSR}, hi:{pc:"bad"},
+          cells:[{l:"stack @0x20009F40",v:"<shellcode>",s:"shell"}], mpuHot:0,
+          log:{t:"Control flow reached shellcode at 0x20009F40 (stack region).",k:"warn"}},
+        {line:2, regs:{pc:R.SHELL, sp:R.SPOK, lr:R.LR, psr:R.PSR}, hi:{pc:"bad"},
+          cells:[{l:"stack @0x20009F40",v:"<shellcode>",s:"shell"}], mpuHot:0,
+          log:{t:"CPU instruction fetch from 0x20009F40…",k:""}},
+        {line:3, regs:{pc:R.SHELL, sp:R.SPOK, lr:R.LR, psr:R.PSR}, hi:{pc:"bad"},
+          cells:[{l:"stack @0x20009F40",v:"<shellcode>",s:"shell"}], mpuHot:0,
+          log:{t:"MPU region 0 = RW | XN | NP. Fetch from execute-never memory.",k:""}},
+        {line:4, regs:{pc:R.MM, sp:R.SPOK, lr:R.LR, psr:"0x21000403"}, hi:{pc:"good"},
+          cells:[{l:"stack @0x20009F40",v:"<shellcode>",s:"shell"}], mpuHot:0,
+          log:{t:"MemManage fault: IACCVIOL. Instruction access violation — execution blocked.",k:"good"},
+          banner:{k:"good",t:"CONTAINED BY MPU — the execute-never stack stopped the shellcode"}},
+      ],
+    },
+    off:{
+      code:[
+        "; control flow reached shellcode on the stack",
+        "  0x20009F40:  <attacker shellcode>",
+        "  MPU region 0 (stack): RW | -- | NP   // no XN bit",
+        "  …shellcode executes with thread privileges…",
+      ],
+      mpu:[{r:"R0 stack",a:"RW | -- | NP"},{r:"R1 code",a:"RO | EXEC"},{r:"R2 periph",a:"PRIV | XN"}],
+      frames:[
+        {line:1, regs:{pc:R.SHELL, sp:R.SPOK, lr:R.LR, psr:R.PSR}, hi:{pc:"bad"},
+          cells:[{l:"stack @0x20009F40",v:"<shellcode>",s:"shell"}], mpuHot:0,
+          log:{t:"Control flow reached shellcode at 0x20009F40 (stack region).",k:"warn"}},
+        {line:2, regs:{pc:R.SHELL, sp:R.SPOK, lr:R.LR, psr:R.PSR}, hi:{pc:"bad"},
+          cells:[{l:"stack @0x20009F40",v:"<shellcode>",s:"shell"}], mpuHot:0,
+          log:{t:"MPU region 0 has no XN bit — the stack is executable.",k:"danger"}},
+        {line:3, regs:{pc:R.SHELL, sp:R.SPOK, lr:R.LR, psr:R.PSR}, hi:{pc:"bad"},
+          cells:[{l:"stack @0x20009F40",v:"<shellcode> running",s:"shell"}], mpuHot:0,
+          log:{t:"Shellcode executes with the thread's privileges. Actuation loop compromised.",k:"danger"},
+          banner:{k:"bad",t:"EXPLOIT SUCCEEDED — an executable stack allowed code injection"}},
+      ],
+    },
+  },
+};
+
+let dbg = { scn:"A", def:false, idx:0, timer:null };
+
+function dbgVariant(){ const s=SCEN[dbg.scn]; return dbg.def ? s.on : s.off; }
+
+function dbgInit(){ dbg={scn:"A",def:false,idx:0,timer:null}; }
+
+function dbgSetScn(scn){ dbgStopRun(); dbg.scn=scn; dbg.idx=0;
+  document.querySelectorAll('.dbg-tab').forEach(t=>t.classList.toggle('on', t.dataset.scn===scn));
+  dbgRender();
+}
+window.dbgSetScn = dbgSetScn;
+window.dbgToggleDef = ()=>{ dbgStopRun(); dbg.def=!dbg.def; dbg.idx=0; dbgRender(); };
+window.dbgStep = ()=>{ const v=dbgVariant(); if(dbg.idx < v.frames.length-1){ dbg.idx++; dbgRender(); } };
+window.dbgReset = ()=>{ dbgStopRun(); dbg.idx=0; dbgRender(); };
+function dbgStopRun(){ if(dbg.timer){ clearInterval(dbg.timer); dbg.timer=null; const b=document.getElementById('dbgRunBtn'); if(b) b.textContent="Run ▶"; } }
+window.dbgRun = ()=>{
+  if(dbg.timer){ dbgStopRun(); return; }
+  const b=document.getElementById('dbgRunBtn'); b.textContent="Pause ⏸";
+  dbg.timer=setInterval(()=>{ const v=dbgVariant(); if(dbg.idx<v.frames.length-1){ dbg.idx++; dbgRender(); } else { dbgStopRun(); } }, 1200);
+};
+
+function dbgRender(){
+  const s=SCEN[dbg.scn], v=dbgVariant(), fr=v.frames[dbg.idx];
+  // defense label + switch
+  document.getElementById('dbgDefLabel').textContent = s.defLabel;
+  const sw=document.getElementById('dbgSwitch');
+  sw.textContent = dbg.def ? "ON" : "OFF";
+  sw.className = "dbg-switch " + (dbg.def ? "on" : "off");
+  document.getElementById('dbgFile').textContent = s.file;
+  // code
+  document.getElementById('dbgCode').innerHTML = v.code.map((ln,i)=>{
+    const cc = ln.indexOf(ln.includes(";")&&!ln.includes("//")?";":"//");
+    let code=ln, cmt="";
+    const idx = ln.search(/\/\/|;/);
+    if(idx>=0){ code=ln.slice(0,idx); cmt=ln.slice(idx); }
+    return `<div class="dbg-cl ${i===fr.line?'dbg-cur':''}">${escHtml(code)}${cmt?`<span class="cn-cmt">${escHtml(cmt)}</span>`:''}</div>`;
+  }).join("");
+  // registers
+  const rk=[["pc","PC"],["sp","SP"],["lr","LR"],["psr","xPSR"]];
+  document.getElementById('dbgRegs').innerHTML = rk.map(([k,lab])=>{
+    const hot = fr.hi && fr.hi[k] ? (fr.hi[k]==="bad"?"hb":"hg") : "";
+    return `<div class="rk">${lab}</div><div class="rv ${hot}">${fr.regs[k]}</div>`;
+  }).join("");
+  // mpu
+  const mpuH=document.getElementById('dbgMpuH'), mpuBox=document.getElementById('dbgMpu');
+  if(v.mpu){ mpuH.style.display="block";
+    mpuBox.innerHTML = v.mpu.map((m,i)=>`<div class="dbg-mpurow ${fr.mpuHot===i?'hot':''}"><span>${m.r}</span><span>${m.a}</span></div>`).join("");
+  } else { mpuH.style.display="none"; mpuBox.innerHTML=""; }
+  // memory cells
+  document.getElementById('dbgCells').innerHTML = fr.cells.map(c=>
+    `<div class="dbg-cell ${c.s}"><span class="cl">${c.l}</span><span class="cv">${c.v}</span></div>`).join("");
+  // console (accumulate 0..idx)
+  document.getElementById('dbgLog').innerHTML = v.frames.slice(0,dbg.idx+1).map((f,i)=>
+    `<div class="l ${f.log.k}"><span class="step">${String(i).padStart(2,'0')} ▸ </span>${escHtml(f.log.t)}</div>`).join("");
+  const logBox=document.getElementById('dbgLog'); logBox.scrollTop=logBox.scrollHeight;
+  // banner
+  const ban=document.getElementById('dbgBanner');
+  if(fr.banner){ ban.style.display="block"; ban.className="dbg-banner "+fr.banner.k; ban.textContent=fr.banner.t; }
+  else { ban.style.display="none"; }
+  // controls
+  document.getElementById('dbgCount').textContent = `frame ${dbg.idx+1} / ${v.frames.length}`;
+  document.getElementById('dbgStepBtn').disabled = (dbg.idx >= v.frames.length-1);
+}
+
+/* =========================================================
+   DRAG & DROP helper
+========================================================= */
+function enableDrag(host){
+  let dragEl=null;
+  host.querySelectorAll('.step').forEach(el=>{
+    el.addEventListener('dragstart',()=>{dragEl=el;el.classList.add('dragging');});
+    el.addEventListener('dragend',()=>{el.classList.remove('dragging');});
+  });
+  host.addEventListener('dragover',e=>{
+    e.preventDefault();
+    const after=[...host.querySelectorAll('.step:not(.dragging)')].reduce((closest,child)=>{
+      const box=child.getBoundingClientRect();
+      const offset=e.clientY-box.top-box.height/2;
+      if(offset<0&&offset>closest.offset) return {offset,element:child};
+      return closest;
+    },{offset:-Infinity}).element;
+    if(!dragEl) return;
+    if(after==null) host.appendChild(dragEl); else host.insertBefore(dragEl,after);
+  });
+}
+
+/* =========================================================
+   SAVE / LOAD SESSION TO FILE  (offline, no server)
+   Lets leaderboard + progress survive a refresh or move
+   between cohorts. Pure Blob download + FileReader upload.
+========================================================= */
+function saveSession(){
+  const snap = {
+    app:"RTOS_Day2_Command_Center",
+    version:1,
+    savedAt:new Date().toISOString(),
+    station: state.station,
+    nextTeam: state.nextTeam,
+    daySeconds: daySeconds,
+    teams: state.teams.map(t=>({id:t.id,name:t.name,score:t.score,color:t.color})),
+  };
+  const blob = new Blob([JSON.stringify(snap,null,2)], {type:"application/json"});
+  const stamp = new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const fname = `rtos-day2-session-${stamp.getFullYear()}${pad(stamp.getMonth()+1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.json`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=fname; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  flashHint(`Saved → ${fname}`,'var(--green)');
+}
+function loadSession(){ document.getElementById('loadFile').click(); }
+document.getElementById('saveSession').addEventListener('click',saveSession);
+document.getElementById('loadSession').addEventListener('click',loadSession);
+document.getElementById('loadFile').addEventListener('change',e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const snap=JSON.parse(ev.target.result);
+      if(snap.app!=="RTOS_Day2_Command_Center") throw new Error("Not a Day 2 session file");
+      if(Array.isArray(snap.teams)){
+        state.teams = snap.teams.map((t,i)=>({
+          id: t.id||(i+1), name: String(t.name||("Team "+(i+1))).slice(0,16),
+          score: Math.max(0, parseInt(t.score)||0),
+          color: t.color||palette[i%palette.length],
+        }));
+      }
+      state.nextTeam = snap.nextTeam || (state.teams.length+1);
+      if(typeof snap.daySeconds==="number"){ daySeconds=snap.daySeconds; renderDayClock(); }
+      if(typeof snap.station==="number" && snap.station>=0 && snap.station<stations.length){ state.station=snap.station; }
+      renderRail(); renderMain(); renderTeams();
+      flashHint(`Loaded session from ${snap.savedAt? new Date(snap.savedAt).toLocaleString():"file"}`,'var(--green)');
+    }catch(err){
+      flashHint("Could not read that file — "+err.message,'var(--red)');
+    }
+    e.target.value=""; // allow re-loading same file
+  };
+  reader.readAsText(file);
+});
+function flashHint(msg,color){
+  let el=document.getElementById('hintToast');
+  if(!el){
+    el=document.createElement('div'); el.id='hintToast';
+    el.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#FFFFFF;border:1px solid var(--line);border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;z-index:200;box-shadow:0 8px 26px rgba(20,40,70,.18);';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg; el.style.color=color; el.style.opacity='1';
+  clearTimeout(el._t); el._t=setTimeout(()=>{el.style.transition='opacity .5s';el.style.opacity='0';},2600);
+}
+
+/* =========================================================
+   INIT
+========================================================= */
+renderRail(); renderMain(); renderTeams(); renderDayClock(); renderStTimer();
+</script>
+</body>
+</html>
